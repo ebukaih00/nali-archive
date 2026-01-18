@@ -1,0 +1,11 @@
+Name,Tribe,Meaning,Phonetic Hint
+Terver,Tiv,Father's (God's) will,ter-VER
+Tersoo,Tiv,Father's love,ter-SOH
+Dooshima,Tiv,Heart's love,doh-SHEE-mah
+Msughter,Tiv,Thanks to the Father,m-SOOGH-ter
+Oche,Idoma,King / Leader,oh-CHAY
+Ene,Idoma,Mother,ay-NAY
+Oyema,Idoma,God loves,oh-YAY-mah
+Anuga,Idoma,God's gift,ah-NOO-gah
+Owoicho,Idoma,God is great,oh-WOY-choh
+Olije,Idoma,Peace / Joy,oh-LEE-jay
