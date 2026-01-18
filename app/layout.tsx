@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Serif, League_Spartan } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const ibmSans = IBM_Plex_Sans({
@@ -37,6 +38,7 @@ export default function RootLayout({
         className={`${ibmSans.variable} ${ibmSerif.variable} ${leagueSpartan.variable} antialiased bg-[#F7F5F3]`}
       >
         {children}
+        <Analytics />
       </body>
     </html>
   );
