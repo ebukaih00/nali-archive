@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { tribes } from '../lib/tribes';
 
 interface NameEntry {
     id: number;
@@ -499,13 +500,27 @@ export default function HeroSearch() {
                                     <p className="text-sm text-primary font-medium">Was this pronunciation helpful?</p>
                                     <div className="flex gap-3 w-full sm:w-auto">
                                         <button
-                                            onClick={() => setLiked(!liked)}
+                                            onClick={() => {
+                                                if (liked) {
+                                                    setLiked(false);
+                                                } else {
+                                                    setLiked(true);
+                                                    setShowFeedbackForm(false);
+                                                }
+                                            }}
                                             className={`flex-1 sm:flex-none justify-center px-4 py-2 border rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${liked ? 'bg-primary text-white border-primary' : 'bg-white border-primary text-primary hover:bg-primary hover:text-white'}`}
                                         >
                                             <ThumbsUp className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} /> {liked ? 'Helpful!' : 'Yes'}
                                         </button>
                                         <button
-                                            onClick={() => setShowFeedbackForm(true)}
+                                            onClick={() => {
+                                                if (showFeedbackForm) {
+                                                    setShowFeedbackForm(false);
+                                                } else {
+                                                    setShowFeedbackForm(true);
+                                                    setLiked(false);
+                                                }
+                                            }}
                                             className={`flex-1 sm:flex-none justify-center px-4 py-2 border rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${showFeedbackForm ? 'bg-primary text-white border-primary' : 'bg-white border-primary text-primary hover:bg-primary hover:text-white'}`}
                                         >
                                             <ThumbsDown className="w-4 h-4" /> No
@@ -612,7 +627,7 @@ export default function HeroSearch() {
                                                             exit={{ opacity: 0, y: -10 }}
                                                             className="absolute z-10 w-full mt-2 bg-white border border-secondary/10 rounded-xl shadow-lg overflow-y-auto max-h-60 top-full left-0 origin-top"
                                                         >
-                                                            {["Igbo", "Yoruba", "Hausa", "Edo", "Efik", "Ibibio", "Tiv", "Ijaw", "Urhobo", "Other"]
+                                                            {tribes
                                                                 .filter(tribe => tribe.toLowerCase().includes(contribution.origin.toLowerCase()))
                                                                 .map((tribe) => (
                                                                     <button
@@ -626,7 +641,7 @@ export default function HeroSearch() {
                                                                         {tribe}
                                                                     </button>
                                                                 ))}
-                                                            {["Igbo", "Yoruba", "Hausa", "Edo", "Efik", "Ibibio", "Tiv", "Ijaw", "Urhobo", "Other"]
+                                                            {tribes
                                                                 .filter(tribe => tribe.toLowerCase().includes(contribution.origin.toLowerCase())).length === 0 && (
                                                                     <div className="px-4 py-3 text-sm text-secondary/60 italic">
                                                                         No matching tribes found
