@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,7 +18,9 @@ interface NameEntry {
 }
 
 export default function HeroSearch() {
-    const [query, setQuery] = useState('');
+    const searchParams = useSearchParams();
+    const initialQuery = searchParams.get('search') || searchParams.get('name') || '';
+    const [query, setQuery] = useState(initialQuery);
     const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [result, setResult] = useState<NameEntry | null>(null);
     const [loading, setLoading] = useState(true);
@@ -97,6 +100,19 @@ export default function HeroSearch() {
         }
         setSearching(false);
     };
+
+    // Auto-search if query is pre-filled from URL
+    useEffect(() => {
+        if (allNames.length > 0 && query && !result) {
+            // We verify if the current query matches the URL param to avoid re-searching on user typing
+            // But here we rely on the fact that initial state set query.
+            // To be safe, we can just check if we have an exact match for the current query
+            const target = allNames.find(n => normalize(n.name) === normalize(query));
+            if (target) {
+                handleSearch(target);
+            }
+        }
+    }, [allNames, query]); // Re-run when names are loaded
 
     const playAudio = async () => {
         if (!result || audioPlaying) return;

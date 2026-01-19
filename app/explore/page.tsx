@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import SearchNames from '../../components/SearchNames';
 import { ArrowLeft } from 'lucide-react';
+import { Suspense } from 'react';
 
 export default function ExplorePage() {
     return (
@@ -21,7 +22,9 @@ export default function ExplorePage() {
                     <div className="w-24"></div>
                 </div>
 
-                <SearchNames />
+                <Suspense fallback={<div>Loading...</div>}>
+                    <SearchNames />
+                </Suspense>
             </div>
         </main>
     );

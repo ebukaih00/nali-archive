@@ -31,9 +31,14 @@ export default function AboutPage() {
                     <div className="mt-12 pt-8 border-t border-primary/20">
                         <h2 className="text-2xl font-serif text-foreground font-medium mb-4">Who made this</h2>
                         <p className="text-lg leading-relaxed">
-                            I’m Chukwuebuka, a Product Designer based in the UK. I’m fascinated by how design can solve the small,
+                            I’m Chukwuebuka Ihueze, a Product Designer based in the UK. I’m fascinated by how design can solve the small,
                             everyday problems that actually matter—like preserving culture in a digital world. This project is my
                             way of using technology to foster the kind of understanding that starts with a name.
+                        </p>
+                        <p className="text-lg leading-relaxed mt-4">
+                            <Link href="/?search=Chukwuebuka" className="underline decoration-secondary/30 hover:decoration-primary transition-colors">
+                                Learn how to pronounce my name here
+                            </Link>
                         </p>
                     </div>
                 </div>

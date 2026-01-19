@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, Volume1, Loader2 } from 'lucide-react';
 
@@ -14,7 +15,9 @@ interface NameEntry {
 }
 
 export default function SearchNames() {
-    const [searchTerm, setSearchTerm] = useState('');
+    const searchParams = useSearchParams();
+    const initialQuery = searchParams.get('search') || '';
+    const [searchTerm, setSearchTerm] = useState(initialQuery);
     const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<number | null>(null);
