@@ -32,7 +32,7 @@ export default async function Home(props: { searchParams: Promise<{ [key: string
   const statsCount = count || 2847;
 
   // Logic to mix Igbo, Yoruba, and Hausa names
-  const allFetched = (randomNames || []).filter(n => !/[?!]/.test(n.name));
+  const allFetched = (randomNames || []).filter(n => !/[?!\uFFFD]/.test(n.name));
 
   // Helper to get random items from array
   const getRandom = (arr: any[], n: number) =>
