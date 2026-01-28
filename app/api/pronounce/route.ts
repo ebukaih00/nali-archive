@@ -4,14 +4,14 @@ import { supabaseAdmin } from "../../../lib/supabase";
 
 export async function POST(req: NextRequest) {
     try {
-        const { text, voice_id, name_id } = await req.json();
+        const { text, voice_id, name_id, stability: stabilityOverride, speed: speedOverride, bypass_cache } = await req.json();
 
         if (!text) {
             return NextResponse.json({ error: "Text is required" }, { status: 400 });
         }
 
-        // 1. Check Cache (Storage First Strategy)
-        if (name_id) {
+        // 1. Check Cache (Storage First Strategy) - Skip if bypass_cache is true
+        if (name_id && !bypass_cache) {
             // Check DB first for speed
             const { data: nameData } = await supabaseAdmin
                 .from('names')
@@ -79,17 +79,21 @@ export async function POST(req: NextRequest) {
 
         const client = new ElevenLabsClient({ apiKey });
 
+        // Use overrides if provided, else defaults
+        const stability = typeof stabilityOverride === 'number' ? stabilityOverride : 0.8;
+        const speed = typeof speedOverride === 'number' ? speedOverride : 0.9;
+
         // Apply 200ms pause and 0.9 speed for better flow
         const audioStream = await client.textToSpeech.convert(voice_id || "it5NMxoQQ2INIh4XcO44", {
             text: `<break time="200ms"/>${textToSpeak}`,
             model_id: "eleven_multilingual_v2",
             output_format: "mp3_44100_128",
             voice_settings: {
-                stability: 0.8, // Reduced for more natural tonality
+                stability,
                 similarity_boost: 0.95,
                 style: 0.0,
                 use_speaker_boost: true,
-                speed: 0.9
+                speed
             },
         });
 
@@ -99,8 +103,8 @@ export async function POST(req: NextRequest) {
         }
         const audioBuffer = Buffer.concat(chunks);
 
-        // 3. Cache Audio (if name_id is provided)
-        if (name_id) {
+        // 3. Cache Audio (if name_id is provided and not in playground/bypass mode)
+        if (name_id && !bypass_cache) {
             const fileName = `${name_id}.mp3`;
             const { data: uploadData, error: uploadError } = await supabaseAdmin
                 .storage
