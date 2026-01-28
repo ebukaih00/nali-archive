@@ -11,8 +11,9 @@ export async function GET(request: Request) {
     const isProduction = process.env.NODE_ENV === 'production' || request.headers.get('host')?.includes('naliproject.org');
     const redirectOrigin = isProduction ? 'https://naliproject.org' : origin;
 
+    const supabase = await createClient();
+
     if (code) {
-        const supabase = await createClient();
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
             const { data: { user } } = await supabase.auth.getUser();
@@ -29,16 +30,22 @@ export async function GET(request: Request) {
                     await supabase
                         .from('profiles')
                         .insert({ id: user.id, role: 'contributor' });
-                    return NextResponse.redirect(`${redirectOrigin}${next}`);
                 }
 
-                if (profile.role === 'contributor' || profile.role === 'admin') {
+                // Allow admin/contributor access
+                if (!profile || profile.role === 'contributor' || profile.role === 'admin') {
                     return NextResponse.redirect(`${redirectOrigin}${next}`);
                 } else {
                     return NextResponse.redirect(`${redirectOrigin}/unauthorized`);
                 }
             }
-            return NextResponse.redirect(`${redirectOrigin}${next}`);
+        } else {
+            // If exchange failed, check if we ALREADY have a session.
+            // This happens if the link was pre-fetched or clicked twice.
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                return NextResponse.redirect(`${redirectOrigin}${next}`);
+            }
         }
     }
 

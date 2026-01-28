@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertCircle, RefreshCcw, Home } from 'lucide-react';
+import { AlertCircle, RefreshCcw, Home, Info } from 'lucide-react';
 
 export default function AuthCodeError() {
     return (
@@ -15,6 +15,18 @@ export default function AuthCodeError() {
                 <p className="text-[#6B6661] mb-8 leading-relaxed">
                     The sign-in link has expired or has already been used. Magic links can only be used once.
                 </p>
+
+                <div className="bg-[#f8f6f4] p-5 rounded-2xl mb-8 text-left border border-[#E9E4DE]">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-[#4e3629] mb-2">
+                        <Info className="w-4 h-4" />
+                        Common Fixes:
+                    </h3>
+                    <ul className="text-xs text-[#6B6661] space-y-2 list-disc pl-4">
+                        <li>Use the <strong>same browser</strong> to request and open the link.</li>
+                        <li>Avoid using <strong>Incognito/Private</strong> windows.</li>
+                        <li>Ensure you are clicking the <strong>most recent</strong> link in your inbox.</li>
+                    </ul>
+                </div>
 
                 <div className="space-y-4">
                     <Link
