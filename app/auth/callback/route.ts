@@ -27,7 +27,7 @@ export async function GET(request: Request) {
                     .eq('id', user.id)
                     .single();
 
-                // 2. Fetch contributor application to sync profile if needed
+                // 2. Fetch approved contributor application
                 const { data: application } = await supabase
                     .from('contributor_applications')
                     .select('languages')
@@ -37,24 +37,32 @@ export async function GET(request: Request) {
 
                 const languages = application?.languages || profile?.languages || null;
 
-                if (!profile) {
-                    await supabase
-                        .from('profiles')
-                        .insert({
-                            id: user.id,
-                            role: 'contributor',
-                            languages: languages
-                        });
-                } else if (!profile.languages && languages) {
-                    // Sync languages if profile exists but languages are missing
-                    await supabase
-                        .from('profiles')
-                        .update({ languages: languages })
-                        .eq('id', user.id);
+                // 3. Access Decision Logic
+                let allowAccess = false;
+
+                if (profile) {
+                    if (profile.role === 'admin' || profile.role === 'contributor') {
+                        allowAccess = true;
+                        // Sync languages if missing
+                        if (!profile.languages && languages) {
+                            await supabase.from('profiles').update({ languages }).eq('id', user.id);
+                        }
+                    } else if (profile.role === 'user' && application) {
+                        // Upgrade un-approved user to contributor if they now have an approved application
+                        await supabase.from('profiles').update({ role: 'contributor', languages }).eq('id', user.id);
+                        allowAccess = true;
+                    }
+                } else if (application) {
+                    // Create new contributor profile for first-time approved login
+                    await supabase.from('profiles').insert({
+                        id: user.id,
+                        role: 'contributor',
+                        languages: languages
+                    });
+                    allowAccess = true;
                 }
 
-                // Allow admin/contributor access
-                if (!profile || profile.role === 'contributor' || profile.role === 'admin') {
+                if (allowAccess) {
                     return NextResponse.redirect(new URL(next, redirectBase));
                 } else {
                     return NextResponse.redirect(new URL('/unauthorized', redirectBase));
