@@ -10,12 +10,14 @@ export async function GET(request: Request) {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
     // Unlock pending items that are expired
-    const { error, count } = await supabaseAdmin
+    const { error, data } = await supabaseAdmin
         .from('audio_submissions')
         .update({ locked_by: null, locked_at: null })
         .lt('locked_at', twoHoursAgo) // Older than 2 hours
         .eq('status', 'pending')
-        .select('id', { count: 'exact' });
+        .select('id');
+
+    const count = data?.length || 0;
 
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
