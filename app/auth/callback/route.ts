@@ -20,17 +20,37 @@ export async function GET(request: Request) {
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                // 1. Check if profile exists, if not create it
+                // 1. Fetch user profile
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('role')
+                    .select('id, role, languages')
                     .eq('id', user.id)
                     .single();
+
+                // 2. Fetch contributor application to sync profile if needed
+                const { data: application } = await supabase
+                    .from('contributor_applications')
+                    .select('languages')
+                    .eq('email', user.email)
+                    .eq('status', 'approved')
+                    .single();
+
+                const languages = application?.languages || profile?.languages || null;
 
                 if (!profile) {
                     await supabase
                         .from('profiles')
-                        .insert({ id: user.id, role: 'contributor' });
+                        .insert({
+                            id: user.id,
+                            role: 'contributor',
+                            languages: languages
+                        });
+                } else if (!profile.languages && languages) {
+                    // Sync languages if profile exists but languages are missing
+                    await supabase
+                        .from('profiles')
+                        .update({ languages: languages })
+                        .eq('id', user.id);
                 }
 
                 // Allow admin/contributor access

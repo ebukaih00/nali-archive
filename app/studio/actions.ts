@@ -27,10 +27,19 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Logic: Fetch all pending audio submissions
-    // In a real app with millions of rows, use a summary table or view. here we fetch id and origin.
+    if (!user) return {};
 
-    // We need to know language. Assuming join on names table.
+    // 1. Fetch user's profile to get their languages and role
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, languages')
+        .eq('id', user.id)
+        .single();
+
+    const allowedLanguages = profile?.languages ? (profile.languages as any[]).map(l => l.language.toLowerCase()) : [];
+    const isAdmin = profile?.role === 'admin';
+
+    // 2. Fetch all pending audio submissions
     const { data, error } = await supabase
         .from('audio_submissions')
         .select(`
@@ -52,16 +61,19 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     const groups: Record<string, typeof data> = {};
 
     data.forEach((item: any) => {
-        // Filter out items locked by others (helper check)
-        // If locked by someone else AND lock is valid (newer than 2 hours), skip counting it as "Available".
-        // UNLESS it is locked by ME.
         const lockedAt = item.locked_at ? new Date(item.locked_at).getTime() : 0;
         const isLockedByOther = item.locked_by && item.locked_by !== user?.id && lockedAt > twoHoursAgo;
 
-        console.log(`Debug Item: ID=${item.id}, LockedBy=${item.locked_by}, Me=${user?.id}, IsLockedByOther=${isLockedByOther}`);
-
         if (!isLockedByOther) {
             const lang = item.names?.origin || 'Uncategorized';
+
+            // FILTER LOGIC:
+            // Skip if user is NOT admin AND this language isn't in their allowed list
+            if (!isAdmin && allowedLanguages.length > 0) {
+                const isAllowed = allowedLanguages.some(al => lang.toLowerCase().includes(al));
+                if (!isAllowed) return;
+            }
+
             if (!groups[lang]) groups[lang] = [];
             groups[lang].push(item);
         }
@@ -75,12 +87,11 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
         const cards: BatchCard[] = [];
 
         for (let i = 0; i < batchCount; i++) {
-            // Check if this chunk has items locked by me
             const chunk = items.slice(i * 50, (i + 1) * 50);
             const lockedByMe = chunk.some((x: any) => x.locked_by === user?.id);
 
             cards.push({
-                id: `batch-${lang}-${i}`, // Virtual ID logic
+                id: `batch-${lang}-${i}`,
                 language: lang,
                 title: `${lang} Batch #${i + 1}`,
                 count: chunk.length,
