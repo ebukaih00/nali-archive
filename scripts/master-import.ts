@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 config({ path: '.env.local' });
-import { supabaseAdmin } from '../lib/supabase';
+// import { supabaseAdmin } from '../lib/supabase'; // Moved dynamic
 // @ts-ignore
 import yorubaNamesPackage from 'yoruba-names';
 
@@ -52,6 +52,7 @@ function generatePhonetic(name: string): string {
 }
 
 async function masterImport() {
+    const { supabaseAdmin } = await import('../lib/supabase');
     console.log('🚀 Starting Master Import...');
 
     // 1. Fetch Existing Names to check duplicates
@@ -81,9 +82,10 @@ async function masterImport() {
                 namesToUpsert.set(nameKey, {
                     name: nameClean,
                     origin_country: 'Nigeria',
-                    language: 'Yoruba', // Known source
+                    origin: 'Yoruba',
                     phonetic_hint: generatePhonetic(nameClean),
-                    meaning: 'Yoruba Name' // Placeholder, package doesn't provide meaning sadly
+                    meaning: 'Yoruba Name',
+                    verification_status: 'verified'
                 });
             }
         });
@@ -109,9 +111,10 @@ async function masterImport() {
                 namesToUpsert.set(nameKey, {
                     name: nameClean,
                     origin_country: 'Nigeria',
-                    language: 'General', // Source doesn't specify
+                    origin: 'General',
                     phonetic_hint: generatePhonetic(nameClean),
-                    meaning: 'Nigerian Name' // Placeholder
+                    meaning: 'Nigerian Name',
+                    verification_status: 'verified'
                 });
             }
         });

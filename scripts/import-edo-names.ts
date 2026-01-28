@@ -39,7 +39,8 @@ async function start() {
                 meaning: '', // No meaning provided in user input
                 origin: 'Edo',
                 origin_country: 'Nigeria',
-                phonetic_hint: phonetic
+                phonetic_hint: phonetic,
+                verification_status: 'verified'
             });
         }
     }

@@ -1,58 +1,17 @@
+
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 import { ElevenLabsClient } from "elevenlabs";
 
-async function testElevenLabs() {
+async function testKeys() {
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) {
-        console.error("❌ ELEVENLABS_API_KEY is missing");
-        return;
-    }
-
+    console.log('Key:', apiKey ? apiKey.substring(0, 5) + '...' : 'MISSING');
     const client = new ElevenLabsClient({ apiKey });
-    const voiceId = "gsyHQ9kWCDIipR26RqQ1";
-
-    console.log("Found API Key. Starting tests...");
-
-    // TEST 1: Default Voice
     try {
-        process.stdout.write("Test 1: Default Voice (Control)... ");
-        await client.textToSpeech.convert("JBFqnCBsd6RMkjVDRZzb", {
-            text: "Control check.",
-            model_id: "eleven_multilingual_v2",
-        });
-        console.log("✅ Success");
+        const voices = await client.voices.getAll();
+        console.log('Voices found:', voices.voices.length);
     } catch (e: any) {
-        console.log("❌ Failed", e?.statusCode);
-    }
-
-    // TEST 2: Custom Voice (No Settings)
-    try {
-        process.stdout.write(`Test 2: Custom Voice (${voiceId}) No Settings... `);
-        await client.textToSpeech.convert(voiceId, {
-            text: "Voice check.",
-            model_id: "eleven_multilingual_v2",
-        });
-        console.log("✅ Success");
-    } catch (e: any) {
-        console.log("❌ Failed", e?.statusCode);
-    }
-
-    // TEST 3: Custom Voice (With Settings)
-    try {
-        process.stdout.write("Test 3: Custom Voice With Settings... ");
-        await client.textToSpeech.convert(voiceId, {
-            text: "Settings check.",
-            model_id: "eleven_multilingual_v2",
-            voice_settings: {
-                stability: 0.4,
-                similarity_boost: 0.8,
-            },
-        });
-        console.log("✅ Success");
-    } catch (e: any) {
-        console.log("❌ Failed", e?.statusCode, e?.body);
+        console.error('Error:', e.message);
     }
 }
-
-testElevenLabs();
+testKeys();

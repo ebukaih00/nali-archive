@@ -59,7 +59,8 @@ async function start() {
                 meaning,
                 origin: 'Urhobo',
                 origin_country: 'Nigeria',
-                phonetic_hint: '' // No auto-gen for now
+                phonetic_hint: '', // No auto-gen for now
+                verification_status: 'verified'
             });
         }
     }

@@ -16,7 +16,7 @@ export const tribes = [
     "Etsako", "Etung", "Etuno", "Palli", "Fulani (Fulbe)", "Fyam (Fyem)", "Fyer (Fer)", "Ga'anda",
     "Gade", "Galambi", "Gamergu-Mulgwa", "Gana (Ganawa)", "Ganawuri", "Gavako", "Gbedde", "Gengle",
     "Geji", "Gera (Gere, Gerawa)", "Geruma (Gerumawa)", "Gingwak", "Gira", "Gizigz", "Goemai", "Gokana",
-    "Goni (Gonawa)", "Gora (Gorawa)", "Gorgoram", "Gokana", "Guhn", "Gwandara", "Gwari (Gbagyi)",
+    "Goni (Gonawa)", "Gora (Gorawa)", "Gorgoram", "Guhn", "Gwandara", "Gwari (Gbagyi)",
     "Gwom", "Gwon (Gwonawa)", "Gwoza (Waha)", "Gyem", "Hausa", "Higi", "Holma", "Hona", "Hyam", "Ibeno",
     "Ibibio", "Ichen", "Idoma", "Igala", "Igbo", "Ijaw", "Ijebu", "Ika", "Ikwere", "Ilaje", "Iman",
     "Ingassana (Gaam)", "Isoko", "Itsekiri", "Iwom", "Iyala (Iyalla)", "Izara (Izar, Izarek)", "Jaba",

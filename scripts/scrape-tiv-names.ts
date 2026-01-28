@@ -51,7 +51,8 @@ async function start() {
                     meaning,
                     origin: 'Tiv',
                     origin_country: 'Nigeria',
-                    phonetic_hint: ''
+                    phonetic_hint: '',
+                    verification_status: 'verified'
                 });
             }
         }

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
                 .from('names')
                 .select('audio_url')
                 .eq('id', name_id)
-                .single();
+                .maybeSingle();
 
             if (nameData?.audio_url) {
                 console.log(`Serving cached audio from DB for name_id: ${name_id}`);
@@ -55,7 +55,23 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 2. Generate Audio
+        // 2. Fetch phonetic override if available
+        let textToSpeak = text;
+        if (name_id) {
+            const { data: nameData } = await supabaseAdmin
+                .from('names')
+                .select('phonetic_hint')
+                .eq('id', name_id)
+                .maybeSingle();
+
+            if (nameData?.phonetic_hint) {
+                // Strip hyphens for "Flow State" to avoid micro-pauses
+                textToSpeak = nameData.phonetic_hint.replace(/-/g, ' ');
+                console.log(`Using phonetic_hint override for name_id ${name_id} (cleaned): ${textToSpeak}`);
+            }
+        }
+
+        // 3. Generate Audio with fine-tuned settings
         const apiKey = process.env.ELEVENLABS_API_KEY;
         if (!apiKey) {
             return NextResponse.json({ error: "ELEVENLABS_API_KEY not set" }, { status: 500 });
@@ -63,15 +79,17 @@ export async function POST(req: NextRequest) {
 
         const client = new ElevenLabsClient({ apiKey });
 
-        const audioStream = await client.textToSpeech.convert(voice_id || "zwbf3iHXH6YGoTCPStfx", {
-            text,
+        // Apply 200ms pause and 0.9 speed for better flow
+        const audioStream = await client.textToSpeech.convert(voice_id || "it5NMxoQQ2INIh4XcO44", {
+            text: `<break time="200ms"/>${textToSpeak}`,
             model_id: "eleven_multilingual_v2",
             output_format: "mp3_44100_128",
             voice_settings: {
-                stability: 0.9,
-                similarity_boost: 0.9,
+                stability: 0.8, // Reduced for more natural tonality
+                similarity_boost: 0.95,
                 style: 0.0,
-                use_speaker_boost: true
+                use_speaker_boost: true,
+                speed: 0.9
             },
         });
 

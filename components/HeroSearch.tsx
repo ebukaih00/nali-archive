@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,7 +18,8 @@ interface NameEntry {
     voice_id?: string;
 }
 
-export default function HeroSearch() {
+export default function HeroSearch({ popularNames = [] }: { popularNames?: string[] }) {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const initialQuery = searchParams.get('search') || searchParams.get('name') || '';
     const [query, setQuery] = useState(initialQuery);
@@ -31,6 +32,145 @@ export default function HeroSearch() {
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [copied, setCopied] = useState(false);
     const [liked, setLiked] = useState(false);
+
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [contribution, setContribution] = useState({ name: '', phonetic: '', origin: '' });
+    const [submissionLoading, setSubmissionLoading] = useState(false);
+    const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
+
+    // Feedback State
+    const [feedbackCategory, setFeedbackCategory] = useState('');
+    const [feedbackComment, setFeedbackComment] = useState('');
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
+    const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isOriginDropdownOpen, setIsOriginDropdownOpen] = useState(false);
+
+    // General Feedback State
+    const [showGeneralFeedbackModal, setShowGeneralFeedbackModal] = useState(false);
+    const [generalFeedback, setGeneralFeedback] = useState({ category: '', comment: '' });
+    const [generalFeedbackLoading, setGeneralFeedbackLoading] = useState(false);
+    const [isGeneralDropdownOpen, setIsGeneralDropdownOpen] = useState(false);
+
+    // Basic sanitization
+    const sanitizeInput = (text: string) => text.replace(/<[^>]*>?/gm, '').trim();
+
+    const submitGeneralFeedback = async () => {
+        if (!generalFeedback.category || !generalFeedback.comment) return;
+
+        setGeneralFeedbackLoading(true);
+        try {
+            const { error } = await supabase.from('feedback').insert({
+                category: sanitizeInput(generalFeedback.category),
+                comment: sanitizeInput(generalFeedback.comment),
+                name_id: null
+            });
+
+            if (error) throw error;
+
+            setGeneralFeedback({ category: '', comment: '' });
+            setShowGeneralFeedbackModal(false);
+        } catch (error) {
+            console.error('Error submitting feedback:', error);
+        } finally {
+            setGeneralFeedbackLoading(false);
+        }
+    };
+
+    const handleAddName = () => {
+        setContribution({ name: query, phonetic: '', origin: '' });
+        setSubmissionSuccess(null);
+        setShowAddModal(true);
+        setSuggestions([]);
+    };
+
+    const submitContribution = async () => {
+        if (!contribution.name || !contribution.origin) return;
+
+        setSubmissionLoading(true);
+        try {
+            const safeName = sanitizeInput(contribution.name);
+            const safePhonetic = sanitizeInput(contribution.phonetic);
+            const safeOrigin = sanitizeInput(contribution.origin);
+
+            const { data, error } = await supabase.from('names').insert({
+                name: safeName,
+                phonetic_hint: safePhonetic,
+                origin: safeOrigin,
+                origin_country: 'Nigeria', // Default
+                status: 'pending',
+                is_community_contributed: true
+            }).select().single();
+
+            if (error) throw error;
+
+            // Trigger AI processing
+            if (data?.id) {
+                fetch('/api/process-new-name', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: data.id,
+                        name: safeName,
+                        origin: safeOrigin
+                    })
+                }).catch(console.error);
+            }
+
+            setSubmissionSuccess(`Thank you! ${safeName} has been added to our queue for review.`);
+            setContribution({ name: '', phonetic: '', origin: '' });
+            setTimeout(() => {
+                setShowAddModal(false);
+                setSubmissionSuccess(null);
+                setQuery('');
+            }, 3000);
+        } catch (err) {
+            console.error('Error submitting name:', JSON.stringify(err, null, 2));
+        } finally {
+            setSubmissionLoading(false);
+        }
+    };
+
+    const submitFeedback = async () => {
+        if (!result || !feedbackComment) return;
+
+        setFeedbackLoading(true);
+        try {
+            const { error } = await supabase.from('feedback').insert({
+                name_id: result.id,
+                name: result.name,
+                category: sanitizeInput(feedbackCategory),
+                comment: sanitizeInput(feedbackComment),
+            });
+
+            if (error) throw error;
+
+            setFeedbackSuccess('Thank you for your feedback! We will review it shortly.');
+            setFeedbackComment('');
+            setTimeout(() => {
+                setShowFeedbackForm(false);
+                setFeedbackSuccess(null);
+            }, 3000);
+        } catch (err) {
+            console.error('Error submitting feedback:', err);
+        } finally {
+            setFeedbackLoading(false);
+        }
+    };
+
+    const clearSearch = () => {
+        setQuery('');
+        setResult(null);
+        setSuggestions([]);
+        setShowFeedbackForm(false);
+        setAudioPlaying(false);
+        setFeedbackSuccess(null);
+        router.push('/', { scroll: false });
+    };
+
+    const filteredTribesList = contribution.origin ? tribes.filter(tribe =>
+        tribe.toLowerCase().includes(contribution.origin.toLowerCase())
+    ) : [];
 
     const normalize = (text: string) =>
         text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -47,7 +187,7 @@ export default function HeroSearch() {
                     const { data, error } = await supabase
                         .from('names')
                         .select('*')
-                        .eq('status', 'verified')
+                        .eq('verification_status', 'verified')
                         .range(from, from + step);
 
                     if (error) throw error;
@@ -92,11 +232,13 @@ export default function HeroSearch() {
         if (target) {
             setResult(target);
             setQuery(target.name);
+            router.push(`/?search=${encodeURIComponent(target.name)}`, { scroll: false });
         } else if (query.trim() !== '') {
             const partial = allNames.find(n => normalize(n.name).includes(normalize(query)));
             if (partial) {
                 setResult(partial);
                 setQuery(partial.name);
+                router.push(`/?search=${encodeURIComponent(partial.name)}`, { scroll: false });
             }
         }
         setSearching(false);
@@ -105,15 +247,22 @@ export default function HeroSearch() {
     // Auto-search if query is pre-filled from URL
     useEffect(() => {
         if (allNames.length > 0 && query && !result) {
-            // We verify if the current query matches the URL param to avoid re-searching on user typing
-            // But here we rely on the fact that initial state set query.
-            // To be safe, we can just check if we have an exact match for the current query
             const target = allNames.find(n => normalize(n.name) === normalize(query));
             if (target) {
                 handleSearch(target);
             }
         }
-    }, [allNames, query]); // Re-run when names are loaded
+    }, [allNames, query]);
+
+    // ... (rest of functions)
+
+    // Scroll down to result when it appears
+    useEffect(() => {
+        if (result) {
+            // We do not scroll automatically anymore per user preference for separate page feel, 
+            // but keeping structure clean. The 'gap' is handled via CSS.
+        }
+    }, [result]);
 
     const playAudio = async () => {
         if (!result || audioPlaying) return;
@@ -146,174 +295,10 @@ export default function HeroSearch() {
         }
     };
 
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [contribution, setContribution] = useState({ name: '', phonetic: '', origin: '' });
-
-
-
-    const [submissionLoading, setSubmissionLoading] = useState(false);
-    const [submissionSuccess, setSubmissionSuccess] = useState<string | null>(null);
-
-    // Feedback State
-    const [feedbackCategory, setFeedbackCategory] = useState('');
-    const [feedbackComment, setFeedbackComment] = useState('');
-    const [feedbackLoading, setFeedbackLoading] = useState(false);
-    const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [isOriginDropdownOpen, setIsOriginDropdownOpen] = useState(false);
-
-    // General Feedback State
-    const [showGeneralFeedbackModal, setShowGeneralFeedbackModal] = useState(false);
-    const [generalFeedback, setGeneralFeedback] = useState({ category: '', comment: '' });
-    const [generalFeedbackLoading, setGeneralFeedbackLoading] = useState(false);
-    const [isGeneralDropdownOpen, setIsGeneralDropdownOpen] = useState(false);
-
-    // Basic sanitization to prevent XSS (strips HTML tags)
-    const sanitizeInput = (text: string) => text.replace(/<[^>]*>?/gm, '').trim();
-
-    const submitGeneralFeedback = async () => {
-        if (!generalFeedback.category || !generalFeedback.comment) return;
-
-        setGeneralFeedbackLoading(true);
-        try {
-            const { error } = await supabase.from('feedback').insert({
-                category: sanitizeInput(generalFeedback.category),
-                comment: sanitizeInput(generalFeedback.comment),
-                name_id: null // Explicitly null for general feedback
-            });
-
-            if (error) throw error;
-
-            setGeneralFeedback({ category: '', comment: '' });
-            setShowGeneralFeedbackModal(false);
-            // Ideally show a toast here, but for now we just close
-        } catch (error) {
-            console.error('Error submitting feedback:', error);
-        } finally {
-            setGeneralFeedbackLoading(false);
-        }
-    };
-
-    const handleAddName = () => {
-        setContribution({ name: query, phonetic: '', origin: '' });
-        setSubmissionSuccess(null);
-        setShowAddModal(true);
-        setSuggestions([]); // Close suggestions
-    };
-
-    const submitContribution = async () => {
-        if (!contribution.name || !contribution.origin) return;
-
-        setSubmissionLoading(true);
-        try {
-            const safeName = sanitizeInput(contribution.name);
-            const safePhonetic = sanitizeInput(contribution.phonetic);
-            const safeOrigin = sanitizeInput(contribution.origin);
-
-            const { data, error } = await supabase.from('names').insert({
-                name: safeName,
-                phonetic_hint: safePhonetic,
-                origin: safeOrigin,
-                origin_country: 'Nigeria', // Defaulting to Nigeria for this specific app context
-                status: 'pending',
-                is_community_contributed: true
-            }).select().single();
-
-            if (error) throw error;
-
-            // Trigger AI processing (fire and forget)
-            if (data?.id) {
-                fetch('/api/process-new-name', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: data.id,
-                        name: safeName,
-                        origin: safeOrigin
-                    })
-                }).catch(console.error);
-            }
-
-            setSubmissionSuccess(`Thank you! ${safeName} has been added to our queue for review.`);
-            setContribution({ name: '', phonetic: '', origin: '' });
-            setTimeout(() => {
-                setShowAddModal(false);
-                setSubmissionSuccess(null);
-                setQuery('');
-            }, 3000); // Close after 3 seconds
-        } catch (err) {
-            console.error('Error submitting name:', JSON.stringify(err, null, 2));
-            // Optionally set an error state here
-        } finally {
-            setSubmissionLoading(false);
-        }
-    };
-
-    const submitFeedback = async () => {
-        if (!result || !feedbackComment) return;
-
-        setFeedbackLoading(true);
-        try {
-            const { error } = await supabase.from('feedback').insert({
-                name_id: result.id,
-                name: result.name, // Store the actual name string for easier reference
-                category: sanitizeInput(feedbackCategory),
-                comment: sanitizeInput(feedbackComment),
-            });
-
-            if (error) throw error;
-
-            setFeedbackSuccess('Thank you for your feedback! We will review it shortly.');
-            setFeedbackComment('');
-            setTimeout(() => {
-                setShowFeedbackForm(false);
-                setFeedbackSuccess(null);
-            }, 3000);
-        } catch (err) {
-            console.error('Error submitting feedback:', err);
-        } finally {
-            setFeedbackLoading(false);
-        }
-    };
-
-    const clearSearch = () => {
-        setQuery('');
-        setResult(null);
-        setSuggestions([]);
-        setShowFeedbackForm(false);
-        setAudioPlaying(false);
-        setFeedbackSuccess(null);
-    };
-
     return (
-        <div className="w-full max-w-[680px] mx-auto flex flex-col items-center px-4 pt-16 relative">
-            {/* Header Section */}
-            <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className="text-center mb-10 w-full flex flex-col items-center"
-            >
-                <h1 className="text-4xl md:text-6xl font-spartan font-bold text-primary mb-4 tracking-tighter">
-                    Nali
-                </h1>
-                <p className="text-[16px] md:text-[19px] text-primary font-light max-w-xl mx-auto mb-6 relative">
-                    Learn to pronounce and understand Nigerian names
-                </p>
-
-
-
-                {/* Mobile Info Icon (Result View Only) */}
-                {result && (
-                    <Link href="/about" className="absolute top-0 right-0 md:hidden p-3 text-secondary hover:text-primary transition-colors" aria-label="About this project">
-                        <Info className="w-6 h-6" />
-                    </Link>
-                )}
-            </motion.div>
-
-
+        <div className="w-full max-w-[680px] mx-auto flex flex-col items-center relative z-20">
             {/* Search Section */}
-            <div className="w-full relative mb-12">
+            <div className="w-full relative">
                 <div className="relative isolate group z-50">
                     <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none z-10">
                         <Search className="w-5 h-5 text-secondary group-focus-within:text-primary transition-colors" />
@@ -325,9 +310,21 @@ export default function HeroSearch() {
                             setQuery(e.target.value);
                             if (result) setResult(null);
                         }}
+                        onFocus={(e) => {
+                            // Only scroll on mobile to avoid jarring desktop experience
+                            if (window.innerWidth < 768) {
+                                const target = e.target;
+                                setTimeout(() => {
+                                    const rect = target.getBoundingClientRect();
+                                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                                    const targetY = rect.top + scrollTop - 20;
+                                    window.scrollTo({ top: targetY, behavior: 'smooth' });
+                                }, 400);
+                            }
+                        }}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        placeholder="Search a name"
-                        className="w-full pl-12 pr-14 py-4 text-lg bg-white border border-primary/20 rounded-xl focus:outline-none focus:border-primary transition-all placeholder:text-secondary/50 text-foreground font-sans"
+                        placeholder="Enter a name to hear it..."
+                        className="w-full pl-12 pr-14 py-4 text-lg bg-white border border-primary/20 rounded-xl focus:outline-none focus:border-primary transition-all placeholder:text-secondary/50 text-foreground font-sans shadow-sm"
                     />
                     <AnimatePresence>
                         {query && (
@@ -350,7 +347,7 @@ export default function HeroSearch() {
                                 initial={{ opacity: 0, y: 10, scale: 0.98 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: 10, scale: 0.98 }}
-                                className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-secondary/10 overflow-hidden z-50 origin-top max-h-[300px] overflow-y-auto"
+                                className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-secondary/10 overflow-hidden z-50 origin-top max-h-[220px] md:max-h-[300px] overflow-y-auto"
                             >
                                 {suggestions.length > 0 ? (
                                     suggestions.map((s, idx) => (
@@ -383,156 +380,144 @@ export default function HeroSearch() {
                         )}
                     </AnimatePresence>
                 </div>
-
-                {/* Landing State About Link */}
-                {!result && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="flex flex-col md:flex-row items-center justify-center gap-4 mt-8"
-                    >
-                        {!loading && allNames.length > 0 && (
-                            <div className="flex items-center gap-2 px-3 py-1 bg-[#F3F4F6] border border-gray-200 rounded-full">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                                </span>
-                                <span className="text-xs font-semibold text-gray-700 tracking-wide">
-                                    {allNames.length.toLocaleString()} active names
-                                </span>
-                            </div>
-                        )}
-                        <Link href="/about" className="text-sm text-secondary hover:text-primary transition-colors underline underline-offset-4 decoration-secondary/30 hover:decoration-primary">
-                            Why this exists
-                        </Link>
-                    </motion.div>
-                )}
             </div>
+
+            {/* Popular Searches */}
+            {!query && !result && popularNames.length > 0 && (
+                <div className="mt-8 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2 duration-500 w-full">
+                    <p className="text-[#8D6E63]/70 text-xs mb-3 font-medium uppercase tracking-wider">Popular searches</p>
+                    <div className="flex flex-wrap justify-center gap-3 w-full max-w-2xl mx-auto px-4">
+                        {popularNames.map((name) => (
+                            <button
+                                key={name}
+                                onClick={() => {
+                                    setQuery(name);
+                                    // Optimistic search if data loaded, else navigation
+                                    const entry = allNames.find(n => n.name === name);
+                                    if (entry) {
+                                        handleSearch(entry);
+                                    } else {
+                                        router.push(`/?search=${encodeURIComponent(name)}`, { scroll: false });
+                                    }
+                                }}
+                                className="px-5 py-2.5 bg-[#F3EFEC] hover:bg-[#EBE5E0] text-[#5D4037] text-sm font-medium rounded-full transition-all border border-[#E9E4DE] hover:border-[#D7CCC8] hover:shadow-sm whitespace-nowrap"
+                            >
+                                {name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Name Pronunciation Card */}
             <AnimatePresence mode="wait">
                 {result && (
                     <motion.div
                         key={result.id}
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 20 }}
-                        className="w-full bg-white rounded-2xl border border-primary/20 overflow-hidden"
+                        exit={{ opacity: 0, y: 10 }}
+                        className="w-full bg-white rounded-2xl border border-[#E9E4DE] overflow-hidden mt-8 shadow-none"
                     >
                         {/* Main Card Content */}
-                        {/* Main Card Content */}
-                        <div className="p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 sm:gap-0">
-                            <div className="flex-1 min-w-0 pr-0 sm:pr-8 w-full">
-                                <div className="mb-2">
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary uppercase tracking-wider">
-                                        {result.origin}
-                                    </span>
-                                </div>
-                                <h2 className="text-[32px] md:text-[40px] font-serif text-primary mb-3 font-medium leading-tight break-words">
+                        <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 text-left">
+                            <div className="flex-1">
+                                <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider mb-4">
+                                    {result.origin}
+                                </span>
+                                <h2 className="text-4xl md:text-5xl font-serif text-[#4e3629] mb-4 leading-tight break-words">
                                     {result.name}
                                 </h2>
-                                <div className="flex flex-col gap-3">
-                                    <div className="flex items-center gap-3 w-full">
-                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/5 rounded-lg border border-primary/10 group/hint w-fit sm:w-auto">
-                                            <span className="text-[17px] text-primary font-medium font-sans whitespace-normal break-words">
-                                                {result.phonetic_hint || "Pronunciation hint unavailable"}
-                                            </span>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigator.clipboard.writeText(result.phonetic_hint || "");
-                                                    setCopied(true);
-                                                    setTimeout(() => setCopied(false), 2000);
-                                                }}
-                                                className="p-1 hover:bg-[#E87461]/10 rounded-md transition-colors flex-shrink-0"
-                                                title="Copy pronunciation"
-                                            >
-                                                {copied ? (
-                                                    <Check className="w-3.5 h-3.5 text-green-600" />
-                                                ) : (
-                                                    <Copy className="w-3.5 h-3.5 text-secondary/40 group-hover/hint:text-primary" />
-                                                )}
-                                            </button>
-                                        </div>
 
-                                        {/* Mobile Play Button */}
+                                <div className="flex items-center gap-4 mt-2">
+                                    <div className="inline-flex items-center gap-3 px-4 py-3 bg-[#F8F6F4] rounded-lg border border-[#E9E4DE] group/hint">
+                                        <span className="text-lg md:text-xl text-[#4e3629] font-sans">
+                                            {result.phonetic_hint || result.name}
+                                        </span>
                                         <button
-                                            onClick={playAudio}
-                                            disabled={audioPlaying}
-                                            className="relative flex-shrink-0 group/play sm:hidden"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(result.phonetic_hint || "");
+                                                setCopied(true);
+                                                setTimeout(() => setCopied(false), 2000);
+                                            }}
+                                            className="ml-2 text-[#4e3629] hover:text-[#4e3629] transition-colors"
+                                            title="Copy pronunciation"
                                         >
-                                            <div className={`w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 transition-all duration-300 group-hover/play:bg-primary ${audioPlaying ? 'animate-pulse' : ''}`}>
-                                                {audioPlaying ? (
-                                                    <Loader2 className="w-6 h-6 text-primary group-hover/play:text-white animate-spin" />
-                                                ) : (
-                                                    <Play className="w-5 h-5 text-primary fill-primary ml-1 group-hover/play:text-white group-hover/play:fill-white transition-colors" />
-                                                )}
-                                            </div>
+                                            {copied ? (
+                                                <Check className="w-4 h-4 text-green-600" />
+                                            ) : (
+                                                <Copy className="w-4 h-4" />
+                                            )}
                                         </button>
                                     </div>
+
+                                    {/* Mobile Play Button */}
+                                    <button
+                                        onClick={playAudio}
+                                        disabled={audioPlaying}
+                                        className="md:hidden flex-shrink-0 w-16 h-16 rounded-full bg-[#F3EFEC] flex items-center justify-center hover:bg-[#4e3629] transition-all duration-300 active:scale-95 border border-[#E9E4DE] group/play"
+                                    >
+                                        {audioPlaying ? (
+                                            <Loader2 className="w-6 h-6 text-[#4e3629] group-hover/play:text-white animate-spin" />
+                                        ) : (
+                                            <Play className="w-7 h-7 text-[#5D4037] fill-[#5D4037] ml-1 group-hover/play:text-white group-hover/play:fill-white transition-colors" />
+                                        )}
+                                    </button>
                                 </div>
                             </div>
 
+                            {/* Desktop Play Button */}
                             <button
                                 onClick={playAudio}
                                 disabled={audioPlaying}
-                                className="relative flex-shrink-0 group/play self-center hidden sm:block"
+                                className="hidden md:flex flex-shrink-0 w-20 h-20 rounded-full bg-[#F3EFEC] flex items-center justify-center hover:bg-[#4e3629] transition-all duration-300 active:scale-95 border border-[#E9E4DE] group/play"
                             >
-                                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 transition-all duration-300 group-hover/play:bg-primary ${audioPlaying ? 'animate-pulse' : ''}`}>
-                                    {audioPlaying ? (
-                                        <Loader2 className="w-7 h-7 md:w-8 md:h-8 text-primary group-hover/play:text-white animate-spin" />
-                                    ) : (
-                                        <Play className="w-6 h-6 md:w-7 md:h-7 text-primary fill-primary ml-1 group-hover/play:text-white group-hover/play:fill-white transition-colors" />
-                                    )}
-                                </div>
+                                {audioPlaying ? (
+                                    <Loader2 className="w-8 h-8 text-[#4e3629] group-hover/play:text-white animate-spin" />
+                                ) : (
+                                    <Play className="w-8 h-8 text-[#5D4037] fill-[#5D4037] ml-1 group-hover/play:text-white group-hover/play:fill-white transition-colors" />
+                                )}
                             </button>
                         </div>
 
-                        {/* Meaning Section (Added based on data structure requirement) */}
-
-
-
                         {/* Feedback Section */}
-                        <div className="border-t border-secondary/10 p-6 bg-background/30">
-                            <div className="flex flex-col gap-4">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                    <p className="text-sm text-primary font-medium">Was this pronunciation helpful?</p>
-                                    <div className="flex gap-3 w-full sm:w-auto">
-                                        <button
-                                            onClick={() => {
-                                                if (liked) {
-                                                    setLiked(false);
-                                                } else {
-                                                    setLiked(true);
-                                                    setShowFeedbackForm(false);
-                                                }
-                                            }}
-                                            className={`flex-1 sm:flex-none justify-center px-4 py-2 border rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${liked ? 'bg-primary text-white border-primary' : 'bg-white border-primary text-primary hover:bg-primary hover:text-white'}`}
-                                        >
-                                            <ThumbsUp className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} /> {liked ? 'Helpful!' : 'Yes'}
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (showFeedbackForm) {
-                                                    setShowFeedbackForm(false);
-                                                } else {
-                                                    setShowFeedbackForm(true);
-                                                    setLiked(false);
-                                                }
-                                            }}
-                                            className={`flex-1 sm:flex-none justify-center px-4 py-2 border rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${showFeedbackForm ? 'bg-primary text-white border-primary' : 'bg-white border-primary text-primary hover:bg-primary hover:text-white'}`}
-                                        >
-                                            <ThumbsDown className="w-4 h-4" /> No
-                                        </button>
-                                    </div>
-                                </div>
-
+                        <div
+                            className="border-t border-gray-100 p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+                            style={{ backgroundColor: 'color-mix(in oklab, var(--background) 30%, transparent)' }}
+                        >
+                            <p className="text-[#4e3629] font-medium text-base text-left">Was this pronunciation helpful?</p>
+                            <div className="flex gap-3 w-full sm:w-auto">
+                                <button
+                                    onClick={() => {
+                                        if (liked) {
+                                            setLiked(false);
+                                        } else {
+                                            setLiked(true);
+                                            setShowFeedbackForm(false);
+                                        }
+                                    }}
+                                    className={`flex-1 sm:flex-none sm:w-24 py-3.5 border rounded-lg transition-all flex items-center justify-center gap-2 text-sm font-medium ${liked ? 'bg-[#4e3629] text-white border-[#4e3629]' : 'bg-white border-[#8D6E63] text-[#4e3629] hover:bg-[#F3EFEC]'}`}
+                                >
+                                    <ThumbsUp className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} /> {liked ? 'Helpful!' : 'Yes'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (showFeedbackForm) {
+                                            setShowFeedbackForm(false);
+                                        } else {
+                                            setShowFeedbackForm(true);
+                                            setLiked(false);
+                                        }
+                                    }}
+                                    className={`flex-1 sm:flex-none sm:w-24 py-3.5 border rounded-lg transition-all flex items-center justify-center gap-2 text-sm font-medium ${showFeedbackForm ? 'bg-[#4e3629] text-white border-[#4e3629]' : 'bg-white border-[#8D6E63] text-[#4e3629] hover:bg-[#F3EFEC]'}`}
+                                >
+                                    <ThumbsDown className="w-4 h-4" /> No
+                                </button>
                             </div>
                         </div>
                     </motion.div>
                 )}
-
             </AnimatePresence>
 
             {/* Add Name Modal */}
@@ -572,33 +557,33 @@ export default function HeroSearch() {
                                         <p className="text-secondary">{submissionSuccess}</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-5">
+                                    <div className="space-y-5 text-left">
                                         <div>
-                                            <label className="block text-sm font-medium text-foreground mb-2">Name</label>
+                                            <label className="block text-sm font-medium text-primary mb-2">Name</label>
                                             <input
                                                 type="text"
                                                 value={contribution.name}
                                                 onChange={(e) => setContribution({ ...contribution, name: e.target.value })}
-                                                className="w-full p-4 bg-background border border-primary/20 rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-serif text-lg"
+                                                className="w-full p-4 bg-background border border-primary/20 rounded-xl text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-serif text-lg"
                                                 placeholder="Name"
                                                 disabled={submissionLoading}
                                             />
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-foreground mb-2">Phonetic Sound</label>
+                                            <label className="block text-sm font-medium text-primary mb-2">Phonetic Sound</label>
                                             <input
                                                 type="text"
                                                 value={contribution.phonetic}
                                                 onChange={(e) => setContribution({ ...contribution, phonetic: e.target.value })}
-                                                className="w-full p-4 bg-background border border-primary/20 rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans"
+                                                className="w-full p-4 bg-background border border-primary/20 rounded-xl text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans"
                                                 placeholder="e.g. CHEE-dee-buh-reh"
                                                 disabled={submissionLoading}
                                             />
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-foreground mb-2">Tribe / Origin</label>
+                                            <label className="block text-sm font-medium text-primary mb-2">Tribe / Origin</label>
                                             <div className="relative">
                                                 <input
                                                     type="text"
@@ -608,13 +593,17 @@ export default function HeroSearch() {
                                                         setContribution({ ...contribution, origin: val });
                                                         setIsOriginDropdownOpen(val.length > 0);
                                                     }}
-                                                    onFocus={() => {
+                                                    onFocus={(e) => {
                                                         if (contribution.origin.length > 0) setIsOriginDropdownOpen(true);
+                                                        // Scroll into view to prevent keyboard covering
+                                                        setTimeout(() => {
+                                                            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        }, 300);
                                                     }}
                                                     onBlur={() => {
                                                         setTimeout(() => setIsOriginDropdownOpen(false), 200);
                                                     }}
-                                                    className="w-full p-4 bg-background border border-primary/20 rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans"
+                                                    className="w-full p-4 bg-background border border-primary/20 rounded-xl text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans"
                                                     placeholder="e.g. Igbo"
                                                     disabled={submissionLoading}
                                                 />
@@ -627,9 +616,8 @@ export default function HeroSearch() {
                                                             exit={{ opacity: 0, y: -10 }}
                                                             className="absolute z-10 w-full mt-2 bg-white border border-secondary/10 rounded-xl shadow-lg overflow-y-auto max-h-60 top-full left-0 origin-top"
                                                         >
-                                                            {tribes
-                                                                .filter(tribe => tribe.toLowerCase().includes(contribution.origin.toLowerCase()))
-                                                                .map((tribe) => (
+                                                            {filteredTribesList.length > 0 ? (
+                                                                filteredTribesList.map((tribe) => (
                                                                     <button
                                                                         key={tribe}
                                                                         onClick={() => {
@@ -640,13 +628,12 @@ export default function HeroSearch() {
                                                                     >
                                                                         {tribe}
                                                                     </button>
-                                                                ))}
-                                                            {tribes
-                                                                .filter(tribe => tribe.toLowerCase().includes(contribution.origin.toLowerCase())).length === 0 && (
-                                                                    <div className="px-4 py-3 text-sm text-secondary/60 italic">
-                                                                        No matching tribes found
-                                                                    </div>
-                                                                )}
+                                                                ))
+                                                            ) : (
+                                                                <div className="px-4 py-3 text-sm text-secondary/60 italic">
+                                                                    No matching tribes found
+                                                                </div>
+                                                            )}
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
@@ -676,7 +663,7 @@ export default function HeroSearch() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="w-full mt-4 bg-white rounded-2xl border border-primary/20 overflow-hidden"
+                        className="w-full mt-4 bg-white rounded-2xl border border-primary/20"
                     >
                         <div className="p-6 md:p-8">
                             <div className="flex justify-between items-center mb-6">
@@ -698,11 +685,12 @@ export default function HeroSearch() {
                                     <p className="text-sm text-secondary">{feedbackSuccess}</p>
                                 </div>
                             ) : (
-                                <div className="space-y-6">
+                                <div className="space-y-6 text-left">
                                     <div className="relative">
-                                        <label className="block text-sm font-medium text-foreground mb-2">Issue Category</label>
+                                        <label className="block text-sm font-medium text-foreground mb-2">What went wrong?</label>
                                         <button
                                             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                            onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
                                             disabled={feedbackLoading}
                                             className="w-full p-4 bg-background border border-primary/20 rounded-xl text-foreground text-left flex justify-between items-center focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans text-sm"
                                         >
@@ -722,14 +710,14 @@ export default function HeroSearch() {
                                                     exit={{ opacity: 0, y: -10 }}
                                                     className="absolute z-10 w-full mt-2 bg-white border border-secondary/10 rounded-xl shadow-lg overflow-hidden"
                                                 >
-                                                    {["Incorrect Pronunciation", "Incorrect Spelling", "Incorrect Origin", "Other"].map((option) => (
+                                                    {["Incorrect pronunciation", "Incorrect spelling", "Incorrect origin", "Other"].map((option) => (
                                                         <button
                                                             key={option}
                                                             onClick={() => {
                                                                 setFeedbackCategory(option);
                                                                 setIsDropdownOpen(false);
                                                             }}
-                                                            className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-secondary/5 transition-colors font-sans"
+                                                            className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-[#F3EFEC] transition-colors font-sans"
                                                         >
                                                             {option}
                                                         </button>
@@ -825,7 +813,7 @@ export default function HeroSearch() {
 
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-foreground mb-2">Category</label>
+                                        <label className="block text-sm font-medium text-primary mb-2 text-left">Category</label>
                                         <div className="relative">
                                             <button
                                                 onClick={() => setIsGeneralDropdownOpen(!isGeneralDropdownOpen)}
@@ -866,7 +854,7 @@ export default function HeroSearch() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-foreground mb-2">Comments</label>
+                                        <label className="block text-sm font-medium text-foreground mb-2 text-left">Comments</label>
                                         <textarea
                                             value={generalFeedback.comment}
                                             onChange={(e) => setGeneralFeedback({ ...generalFeedback, comment: e.target.value })}
@@ -895,9 +883,7 @@ export default function HeroSearch() {
                     </div>
                 )}
             </AnimatePresence>
-
-            {/* Result State Footer (Desktop) */}
-
-        </div>
+        </div >
     );
 }
+

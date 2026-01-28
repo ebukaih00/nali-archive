@@ -42,6 +42,8 @@ export default function SearchNames() {
                     const { data, error } = await supabase
                         .from('names')
                         .select('*')
+                        .eq('verification_status', 'verified')
+                        .eq('verification_status', 'verified')
                         .order('name', { ascending: true })
                         .range(from, from + step);
 

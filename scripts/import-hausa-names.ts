@@ -13,6 +13,7 @@ interface NameEntry {
     origin: string;
     origin_country: string;
     phonetic_hint: string;
+    verification_status?: string;
 }
 
 function generateHausaPhonetic(name: string): string {
@@ -181,7 +182,8 @@ async function start() {
                     meaning: meaning,
                     origin: 'Hausa',
                     origin_country: 'Nigeria',
-                    phonetic_hint: generateHausaPhonetic(currentName)
+                    phonetic_hint: generateHausaPhonetic(currentName),
+                    verification_status: 'verified'
                 });
             }
 
@@ -209,7 +211,8 @@ async function start() {
             meaning: meaning,
             origin: 'Hausa',
             origin_country: 'Nigeria',
-            phonetic_hint: generateHausaPhonetic(currentName)
+            phonetic_hint: generateHausaPhonetic(currentName),
+            verification_status: 'verified'
         });
     }
 

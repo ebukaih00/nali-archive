@@ -49,7 +49,8 @@ async function start() {
             meaning,
             origin: tribe, // e.g. Tiv or Idoma
             origin_country: 'Nigeria',
-            phonetic_hint: phonetic
+            phonetic_hint: phonetic,
+            verification_status: 'verified'
         });
     }
 
