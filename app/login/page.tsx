@@ -20,8 +20,6 @@ export default function LoginPage() {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
                 router.replace('/studio/library');
-            } else {
-                setCheckingAuth(false);
             }
         };
         checkAuth();
@@ -55,14 +53,6 @@ export default function LoginPage() {
             setLoading(false);
         }
     };
-
-    if (checkingAuth) {
-        return (
-            <div className="min-h-screen bg-[#F8F7F5] flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen bg-[#F8F7F5] flex flex-col items-center justify-center p-4">

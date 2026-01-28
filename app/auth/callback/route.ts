@@ -8,8 +8,9 @@ export async function GET(request: Request) {
     const next = searchParams.get('next') ?? '/studio/library';
 
     // Determine the redirect origin based on the environment
+    // Use origin as fallback but prioritize naliproject.org in production
     const isProduction = process.env.NODE_ENV === 'production' || request.headers.get('host')?.includes('naliproject.org');
-    const redirectOrigin = isProduction ? 'https://naliproject.org' : origin;
+    const redirectBase = isProduction ? 'https://naliproject.org' : origin;
 
     const supabase = await createClient();
 
@@ -34,21 +35,21 @@ export async function GET(request: Request) {
 
                 // Allow admin/contributor access
                 if (!profile || profile.role === 'contributor' || profile.role === 'admin') {
-                    return NextResponse.redirect(`${redirectOrigin}${next}`);
+                    return NextResponse.redirect(new URL(next, redirectBase));
                 } else {
-                    return NextResponse.redirect(`${redirectOrigin}/unauthorized`);
+                    return NextResponse.redirect(new URL('/unauthorized', redirectBase));
                 }
             }
         } else {
-            // If exchange failed, check if we ALREADY have a session.
+            // Already have a session? 
             // This happens if the link was pre-fetched or clicked twice.
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                return NextResponse.redirect(`${redirectOrigin}${next}`);
+                return NextResponse.redirect(new URL(next, redirectBase));
             }
         }
     }
 
     // return the user to an error page with instructions
-    return NextResponse.redirect(`${redirectOrigin}/auth/auth-code-error`);
+    return NextResponse.redirect(new URL('/auth/auth-code-error', redirectBase));
 }
