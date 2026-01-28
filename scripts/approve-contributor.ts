@@ -48,7 +48,7 @@ async function approveContributor(email: string) {
     const { error: authError } = await supabaseAdmin.auth.signInWithOtp({
         email,
         options: {
-            emailRedirectTo: `http://localhost:3000/auth/callback?next=/studio/library`, // Standard dev URL
+            emailRedirectTo: `https://naliproject.org/auth/callback?next=/studio/library`, // Production URL
         },
     });
 
