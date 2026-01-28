@@ -7,15 +7,18 @@ export async function GET(request: Request) {
     // if "next" is in param, use it as the redirect URL
     const next = searchParams.get('next') ?? '/studio/library';
 
+    // Determine the redirect origin based on the environment
+    const isProduction = process.env.NODE_ENV === 'production' || request.headers.get('host')?.includes('naliproject.org');
+    const redirectOrigin = isProduction ? 'https://naliproject.org' : origin;
+
     if (code) {
         const supabase = await createClient();
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
-            const supabase = await createClient();
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
-                // 1. Check if profile exists, if not create it (Handy for first-time invites)
+                // 1. Check if profile exists, if not create it
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('role')
@@ -26,19 +29,19 @@ export async function GET(request: Request) {
                     await supabase
                         .from('profiles')
                         .insert({ id: user.id, role: 'contributor' });
-                    return NextResponse.redirect(`${origin}${next}`);
+                    return NextResponse.redirect(`${redirectOrigin}${next}`);
                 }
 
                 if (profile.role === 'contributor' || profile.role === 'admin') {
-                    return NextResponse.redirect(`${origin}${next}`);
+                    return NextResponse.redirect(`${redirectOrigin}${next}`);
                 } else {
-                    return NextResponse.redirect(`${origin}/unauthorized`);
+                    return NextResponse.redirect(`${redirectOrigin}/unauthorized`);
                 }
             }
-            return NextResponse.redirect(`${origin}${next}`);
+            return NextResponse.redirect(`${redirectOrigin}${next}`);
         }
     }
 
     // return the user to an error page with instructions
-    return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+    return NextResponse.redirect(`${redirectOrigin}/auth/auth-code-error`);
 }
