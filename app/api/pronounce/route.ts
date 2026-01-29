@@ -100,10 +100,12 @@ export async function POST(req: NextRequest) {
 
         const client = new ElevenLabsClient({ apiKey });
 
-        // Use defaults if still undefined
+        // Use defaults if still undefined and apply a global safety cap (all voices should be slower)
         const stability = typeof finalStability === 'number' ? finalStability : 0.8;
-        const speed = typeof finalSpeed === 'number' ? finalSpeed : 0.75;
+        let speed = typeof finalSpeed === 'number' ? finalSpeed : 0.65;
 
+        // Ensure no voice is rushed, even if rules or overrides are present
+        speed = Math.min(speed, 0.75);
         // Apply 200ms pause for better flow
         const audioStream = await client.textToSpeech.convert(finalVoiceId, {
             text: `<break time="200ms"/>${textToSpeak}`,
