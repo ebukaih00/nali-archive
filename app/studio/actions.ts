@@ -294,9 +294,21 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
         if (error) throw error;
 
         if (action === 'approved' && submission.name_id) {
+            // Get the submission details to promote
+            const { data: fullSub } = await supabase
+                .from('audio_submissions')
+                .select('audio_url, phonetic_hint')
+                .eq('id', taskId)
+                .single();
+
             await supabase
                 .from('names')
-                .update({ verification_status: 'verified' })
+                .update({
+                    verification_status: 'verified',
+                    status: 'verified',
+                    verified_audio_url: fullSub?.audio_url || null,
+                    phonetic_hint: fullSub?.phonetic_hint || null
+                })
                 .eq('id', submission.name_id);
         }
     } else {
@@ -343,13 +355,13 @@ export async function updateSubmission(taskId: string, formData: FormData) {
     }
 
     if (isDirectName) {
-        // Direct assignment recording: Create submission AND update name status
+        // Direct assignment recording: Move to 'submitted' state for admin review
         const updates: any = {
-            verification_status: 'verified',
-            status: 'verified'
+            status: 'submitted', // Hide from contributor queue
+            phonetic_hint: phonetic // Optional preview for admin
         };
-        if (audioUrl) updates.audio_url = audioUrl;
-        if (phonetic) updates.phonetic_hint = phonetic;
+        // NOTE: We do NOT update audio_url or verification_status yet.
+        // That happens when an admin approves the submission.
 
         const { error: nameError } = await supabase
             .from('names')

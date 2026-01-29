@@ -11,21 +11,26 @@ export async function POST(req: NextRequest) {
         }
 
         // 1. Check Cache (Database First Strategy) - Skip if bypass_cache is true
+        // 1. Check for Human Verified Audio First (Priority 1)
         if (name_id && !bypass_cache) {
-            // Check DB first for speed
             const { data: nameData } = await supabaseAdmin
                 .from('names')
-                .select('audio_url')
+                .select('audio_url, verified_audio_url')
                 .eq('id', name_id)
                 .maybeSingle();
 
-            if (nameData?.audio_url) {
-                console.log(`Serving cached audio from DB for name_id: ${name_id}`);
-                const cachedRes = await fetch(nameData.audio_url);
+            // HUMAN AUDIO takes precedence
+            const priorityAudio = nameData?.verified_audio_url || nameData?.audio_url;
+
+            if (priorityAudio) {
+                console.log(`Serving cached/verified audio for name_id: ${name_id}`);
+                const cachedRes = await fetch(priorityAudio);
                 if (cachedRes.ok) {
                     const arrayBuffer = await cachedRes.arrayBuffer();
+                    // Detect if it's a webm recording or mp3
+                    const contentType = priorityAudio.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
                     return new NextResponse(Buffer.from(arrayBuffer), {
-                        headers: { "Content-Type": "audio/mpeg" },
+                        headers: { "Content-Type": contentType },
                     });
                 }
             }
