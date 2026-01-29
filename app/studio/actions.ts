@@ -95,7 +95,6 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
                 names!inner (id, origin, assigned_to, ignored)
             `)
             .eq('status', 'pending')
-            .is('names.assigned_to', null) // Only show unassigned in open queue
             .eq('names.ignored', false)
             .limit(2000);
 
@@ -124,6 +123,13 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
         const isLockedByOther = item.locked_by && item.locked_by !== user.id && lockedAt > twoHoursAgo;
 
         if (!isLockedByOther) {
+            // ADMIN REVIEWS GO TO A SPECIAL GROUP
+            if (isAdmin && item.names?.assigned_to) {
+                if (!groups['Submitted for Review']) groups['Submitted for Review'] = [];
+                groups['Submitted for Review'].push(item);
+                return;
+            }
+
             const lang = item.names?.origin || 'Uncategorized';
 
             // FILTER LOGIC
