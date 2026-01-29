@@ -27,11 +27,22 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    // 2. Refresh Session
+    // 2. Skip middleware for non-studio routes and assets
+    const isPublicPath =
+        request.nextUrl.pathname.startsWith('/auth') ||
+        request.nextUrl.pathname.startsWith('/login') ||
+        request.nextUrl.pathname.startsWith('/unauthorized') ||
+        request.nextUrl.pathname === '/';
+
+    if (isPublicPath) {
+        return response;
+    }
+
+    // 3. Refresh Session
     // This will refresh the session if needed and update cookies
     const { data: { user } } = await supabase.auth.getUser()
 
-    // 3. Protect /studio Route
+    // 4. Protect /studio Route
     if (request.nextUrl.pathname.startsWith('/studio')) {
         // DEMO BYPASS
         if (request.cookies.get('nali_demo_mode')) {

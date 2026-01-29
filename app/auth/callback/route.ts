@@ -14,6 +14,13 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
 
+    // 0. PKCE Defense: Check if already logged in (e.g. by a pre-fetcher)
+    const { data: { user: existingUser } } = await supabase.auth.getUser();
+    if (existingUser) {
+        console.log(`✅ User ${existingUser.email} already has a session. Skipping exchange.`);
+        return NextResponse.redirect(new URL(next, redirectBase));
+    }
+
     if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
