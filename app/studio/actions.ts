@@ -22,6 +22,7 @@ export interface Task {
     phonetic_hint?: string;
     original_phonetics?: string; // Cache the published version for "Reset"
     status: 'pending' | 'approved' | 'rejected' | 'edited';
+    isDirectName?: boolean;
 }
 
 /**
@@ -73,7 +74,15 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     const { supabase, user, isAdmin, languages: allowedLanguages } = await getAuth();
     if (!user) return {};
 
-    // 2. Fetch all pending audio submissions
+    // 2. Fetch Assigned Names First (Highest Priority)
+    const { data: assignedItems } = await supabase
+        .from('names')
+        .select('id, origin, status')
+        .eq('assigned_to', user.email!)
+        .eq('status', 'pending')
+        .eq('ignored', false);
+
+    // 3. Fetch all pending audio submissions (Open Queue)
     const { data, error } = await supabase
         .from('audio_submissions')
         .select(`
@@ -81,9 +90,11 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
             locked_by, 
             locked_at, 
             status,
-            names!inner (origin)
+            names!inner (id, origin, assigned_to, ignored)
         `)
         .eq('status', 'pending')
+        .is('names.assigned_to', null) // Only show unassigned in open queue
+        .eq('names.ignored', false)
         .limit(2000);
 
     if (error) {
@@ -92,8 +103,18 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     }
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).getTime();
-    const groups: Record<string, typeof data> = {};
+    const groups: Record<string, any[]> = {};
 
+    // A. Handle Assigned Names as a priority batch
+    if (assignedItems && assignedItems.length > 0) {
+        groups['My Assignments'] = assignedItems.map(item => ({
+            id: item.id,
+            names: item,
+            is_direct_name: true // Flag to indicate these are names, not existing submissions
+        }));
+    }
+
+    // B. Handle Open Queue
     data.forEach((item: any) => {
         const lockedAt = item.locked_at ? new Date(item.locked_at).getTime() : 0;
         const isLockedByOther = item.locked_by && item.locked_by !== user.id && lockedAt > twoHoursAgo;
@@ -146,6 +167,33 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
 
+    // 1. Check for Assigned Names first
+    if (language === 'My Assignments') {
+        const { data: assigned } = await supabase
+            .from('names')
+            .select('id, name, origin, meaning, phonetic_hint')
+            .eq('assigned_to', user.email!)
+            .eq('status', 'pending')
+            .eq('ignored', false)
+            .limit(50);
+
+        if (assigned && assigned.length > 0) {
+            const tasks: Task[] = assigned.map(d => ({
+                id: d.id, // Using name_id as taskId for assigned names
+                name: d.name,
+                origin: d.origin,
+                meaning: d.meaning || "No meaning provided",
+                audioUrl: '', // No audio yet for assigned names
+                status: 'pending',
+                phonetic_hint: d.phonetic_hint || '',
+                original_phonetics: d.phonetic_hint || '',
+                isDirectName: true // UI helper
+            }));
+            return { tasks, expiry: now.getTime() + (2 * 60 * 60 * 1000) };
+        }
+    }
+
+    // 2. Clear previous locks if any
     const { data: myLocked, error: myLockedError } = await supabase
         .from('audio_submissions')
         .select(`
@@ -165,6 +213,8 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
             .select(`id, names!inner(origin)`)
             .eq('status', 'pending')
             .eq('names.origin', language)
+            .is('names.assigned_to', null) // Only unassigned
+            .eq('names.ignored', false)
             .or(`locked_by.is.null,locked_at.lt.${twoHoursAgo}`)
             .limit(50);
 
@@ -256,6 +306,7 @@ export async function updateSubmission(taskId: string, formData: FormData) {
 
     const phonetic = formData.get('phonetic') as string;
     const audioFile = formData.get('audio') as File;
+    const isDirectName = formData.get('isDirectName') === 'true';
 
     let audioUrl = null;
 
@@ -271,17 +322,65 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         audioUrl = publicUrl;
     }
 
-    const updates: any = { status: 'edited' };
-    if (audioUrl) updates.audio_url = audioUrl;
-    if (phonetic) updates.phonetic_hint = phonetic;
+    if (isDirectName) {
+        // Direct assignment recording: Create submission AND update name status
+        const updates: any = {
+            verification_status: 'verified',
+            status: 'verified'
+        };
+        if (audioUrl) updates.audio_url = audioUrl;
+        if (phonetic) updates.phonetic_hint = phonetic;
+
+        const { error: nameError } = await supabase
+            .from('names')
+            .update(updates)
+            .eq('id', taskId)
+            .eq('assigned_to', user.email!);
+
+        if (nameError) throw nameError;
+
+        // Also create a record in audio_submissions for tracking
+        await supabase.from('audio_submissions').insert({
+            name_id: taskId,
+            audio_url: audioUrl,
+            status: 'approved',
+            contributor_id: user.id,
+            phonetic_hint: phonetic,
+            verification_count: 1
+        });
+    } else {
+        // Standard review update
+        const updates: any = { status: 'edited' };
+        if (audioUrl) updates.audio_url = audioUrl;
+        if (phonetic) updates.phonetic_hint = phonetic;
+
+        const { error } = await supabase
+            .from('audio_submissions')
+            .update(updates)
+            .eq('id', taskId)
+            .eq('locked_by', user.id);
+
+        if (error) throw error;
+    }
+
+    revalidatePath('/studio/library');
+    return { success: true };
+}
+
+export async function ignoreName(nameId: string) {
+    const { supabase, user } = await getAuth();
+    if (!user) throw new Error("Unauthorized");
 
     const { error } = await supabase
-        .from('audio_submissions')
-        .update(updates)
-        .eq('id', taskId)
-        .eq('locked_by', user.id);
+        .from('names')
+        .update({ ignored: true })
+        .eq('id', nameId)
+        .eq('assigned_to', user.email!);
 
     if (error) throw error;
+
+    // Also clear lock if it was an audio_submission
+    await supabase.from('audio_submissions').update({ status: 'rejected' }).eq('id', nameId).eq('locked_by', user.id);
 
     revalidatePath('/studio/library');
     return { success: true };
@@ -336,4 +435,91 @@ export async function releaseLocks() {
         .eq('locked_by', user.id);
 
     revalidatePath('/studio/library');
+}
+
+export async function searchTuningNames(query: string) {
+    const { supabase, isAdmin } = await getAuth();
+    if (!isAdmin) throw new Error("Unauthorized");
+
+    if (!query || query.length < 2) return [];
+
+    const { data, error } = await supabase
+        .from('names')
+        .select('id, name, origin, phonetic_hint, tts_settings')
+        .ilike('name', `%${query}%`)
+        .limit(10);
+
+    if (error) throw error;
+    return data;
+}
+
+export async function saveTuningFormula(data: {
+    nameId: string,
+    phonetic: string,
+    settings: any,
+    ruleType?: 'prefix' | 'suffix' | 'equals',
+    rulePattern?: string
+}) {
+    const { supabase, isAdmin } = await getAuth();
+    if (!isAdmin) throw new Error("Unauthorized");
+
+    // 1. Update the specific name
+    const { error: nameError } = await supabase
+        .from('names')
+        .update({
+            phonetic_hint: data.phonetic,
+            tts_settings: data.settings,
+            verification_status: 'verified', // Tuning also verifies it
+            audio_url: null // CLEAR CACHE in names table
+        })
+        .eq('id', data.nameId);
+
+    if (nameError) throw nameError;
+
+    // Clear matching submissions too
+    await supabase
+        .from('audio_submissions')
+        .update({ audio_url: null })
+        .eq('name_id', data.nameId);
+
+    // 2. Create Global Rule if requested
+    if (data.ruleType && data.rulePattern) {
+        const fullPattern = `${data.ruleType}:${data.rulePattern.toLowerCase()}`;
+        const { error: ruleError } = await supabase
+            .from('pronunciation_rules')
+            .upsert({
+                pattern: fullPattern,
+                phonetic_replacement: data.phonetic,
+                settings: data.settings
+            }, {
+                onConflict: 'pattern'
+            });
+
+        if (ruleError) {
+            console.error("Error saving global rule:", ruleError);
+        } else {
+            // Apply rule to ALL matching names by clearing their audio_url
+            console.log(`🧹 Clearing cache for names matching rule: ${fullPattern}`);
+            const pattern = data.rulePattern.toLowerCase();
+
+            // A. Get affected name IDs
+            let nameQuery = supabase.from('names').select('id');
+            if (data.ruleType === 'prefix') nameQuery = nameQuery.ilike('name', `${pattern}%`);
+            else if (data.ruleType === 'suffix') nameQuery = nameQuery.ilike('name', `%${pattern}`);
+            else if (data.ruleType === 'equals') nameQuery = nameQuery.ilike('name', pattern);
+
+            const { data: affectedNames } = await nameQuery;
+            const nameIds = affectedNames?.map(n => n.id) || [];
+
+            if (nameIds.length > 0) {
+                // B. Clear names cache
+                await supabase.from('names').update({ audio_url: null }).in('id', nameIds);
+                // C. Clear submissions cache
+                await supabase.from('audio_submissions').update({ audio_url: null }).in('name_id', nameIds);
+            }
+        }
+    }
+
+    revalidatePath('/studio/playground');
+    return { success: true };
 }

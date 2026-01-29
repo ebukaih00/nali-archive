@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 // import { useRouter } from 'next/navigation'; // Not currently used
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Sliders } from 'lucide-react';
-import { getPendingBatches, claimBatch as claimBatchAction, submitReview, updateSubmission, releaseLocks, resetSubmission, type BatchCard, type Task } from '../actions';
+import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Trash2 } from 'lucide-react';
+import { getPendingBatches, claimBatch as claimBatchAction, submitReview, updateSubmission, releaseLocks, resetSubmission, ignoreName, type BatchCard, type Task } from '../actions';
 import confetti from 'canvas-confetti';
 
 export default function DashboardPage() {
@@ -149,6 +149,20 @@ export default function DashboardPage() {
         }
     };
 
+    const handleIgnore = async (id: string) => {
+        // Optimistic UI
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'rejected' } : t));
+        scheduleVanish(id);
+
+        try {
+            await ignoreName(id);
+        } catch (error) {
+            console.error("Failed to ignore", error);
+            cancelVanish(id);
+            setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'pending' } : t));
+        }
+    };
+
     const handleUndo = async (id: string) => {
         cancelVanish(id);
         // Optimistic Revert
@@ -200,6 +214,10 @@ export default function DashboardPage() {
             formData.append('phonetic', editForm.phonetic);
             if (editForm.audioBlob) {
                 formData.append('audio', editForm.audioBlob, 'recording.webm');
+            }
+            const task = tasks.find(t => t.id === id);
+            if (task?.isDirectName) {
+                formData.append('isDirectName', 'true');
             }
             await updateSubmission(id, formData);
             // Continuous Play
@@ -281,7 +299,9 @@ export default function DashboardPage() {
     // Play Audio
     const playAudio = (url?: string) => {
         if (!url) return;
-        const audio = new Audio(url);
+        // Cache bust to ensure we get re-generated audio after tuning
+        const buster = url.includes('?') ? `&v=${Date.now()}` : `?v=${Date.now()}`;
+        const audio = new Audio(url + buster);
         audio.play().catch(e => console.error("Play error", e));
     };
 
@@ -500,6 +520,11 @@ export default function DashboardPage() {
                                                     <h3 className={`text-xl font-serif ${task.status === 'approved' || task.status === 'edited' ? 'text-[#4e3629]' : 'text-[#2C2420]'}`}>
                                                         {task.name}
                                                     </h3>
+                                                    {task.isDirectName && !task.audioUrl && (
+                                                        <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-sans font-bold rounded uppercase tracking-wider border border-amber-100">
+                                                            Needs Recording
+                                                        </span>
+                                                    )}
                                                     {task.audioUrl && (
                                                         <button
                                                             onClick={() => playAudio(task.audioUrl)}
@@ -548,6 +573,13 @@ export default function DashboardPage() {
                                                 {task.status === 'pending' && (
                                                     <>
                                                         <button
+                                                            onClick={() => handleIgnore(task.id)}
+                                                            className="p-3 rounded-xl border border-red-100 text-red-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                            title="Ignore / Skip"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                        <button
                                                             onClick={() => startEditing(task)}
                                                             className="p-3 rounded-xl border border-[#E9E4DE] text-[#4e3629]/70 hover:text-[#4e3629] hover:bg-[#F3EFEC] transition-colors"
                                                             title="Edit / Record"
@@ -558,7 +590,7 @@ export default function DashboardPage() {
                                                             onClick={() => handleApprove(task.id)}
                                                             className="px-4 py-2 bg-transparent border border-[#4e3629]/20 text-[#4e3629] rounded-xl hover:bg-[#4e3629]/5 font-sans text-sm font-medium transition-colors flex items-center gap-2"
                                                         >
-                                                            <CheckCircle2 className="w-4 h-4" /> Approve
+                                                            <CheckCircle2 className="w-4 h-4" /> {task.isDirectName ? 'Submit' : 'Approve'}
                                                         </button>
                                                     </>
                                                 )}

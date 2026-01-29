@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Text is required" }, { status: 400 });
         }
 
-        // 1. Check Cache (Storage First Strategy) - Skip if bypass_cache is true
+        // 1. Check Cache (Database First Strategy) - Skip if bypass_cache is true
         if (name_id && !bypass_cache) {
             // Check DB first for speed
             const { data: nameData } = await supabaseAdmin
@@ -29,45 +29,61 @@ export async function POST(req: NextRequest) {
                     });
                 }
             }
+        }
 
-            // Fallback: Check Storage directly (in case DB is missing URL but file exists)
-            const fileName = `${name_id}.mp3`;
-            const { data: { publicUrl } } = supabaseAdmin
-                .storage
-                .from('name-audio')
-                .getPublicUrl(fileName);
+        // 2. Fetch phonetic overrides and settings
+        let textToSpeak = text;
+        let finalVoiceId = voice_id || "it5NMxoQQ2INIh4XcO44";
+        let finalStability = stabilityOverride;
+        let finalSpeed = speedOverride;
 
-            const storageRes = await fetch(publicUrl, { method: 'HEAD' });
-            if (storageRes.ok) {
-                console.log(`Serving cached audio from Storage for name_id: ${name_id}`);
-                const fileRes = await fetch(publicUrl);
-                const arrayBuffer = await fileRes.arrayBuffer();
+        // A. Apply GLOBAL RULES First (Prefixes/Suffixes)
+        const { data: rules } = await supabaseAdmin
+            .from('pronunciation_rules')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-                // Update DB to sync
-                await supabaseAdmin
-                    .from('names')
-                    .update({ audio_url: publicUrl })
-                    .eq('id', name_id);
+        if (rules && rules.length > 0) {
+            for (const rule of rules) {
+                const [type, pattern] = rule.pattern.split(':');
+                const lowerText = text.toLowerCase();
+                let match = false;
 
-                return new NextResponse(Buffer.from(arrayBuffer), {
-                    headers: { "Content-Type": "audio/mpeg" },
-                });
+                if (type === 'prefix' && lowerText.startsWith(pattern)) match = true;
+                else if (type === 'suffix' && lowerText.endsWith(pattern)) match = true;
+                else if (type === 'equals' && lowerText === pattern) match = true;
+
+                if (match) {
+                    console.log(`🎯 Applying global rule [${rule.pattern}] to "${text}"`);
+                    if (rule.phonetic_replacement) {
+                        textToSpeak = rule.phonetic_replacement.replace(/-/g, ' ');
+                    }
+                    if (finalStability === undefined) finalStability = rule.settings?.stability;
+                    if (finalSpeed === undefined) finalSpeed = rule.settings?.speed;
+                    if (!voice_id) finalVoiceId = rule.settings?.voice_id || finalVoiceId;
+                    break; // Use the most recent matching rule
+                }
             }
         }
 
-        // 2. Fetch phonetic override if available
-        let textToSpeak = text;
+        // B. Apply NAME-SPECIFIC Overrides (Highest Priority)
         if (name_id) {
             const { data: nameData } = await supabaseAdmin
                 .from('names')
-                .select('phonetic_hint')
+                .select('phonetic_hint, tts_settings')
                 .eq('id', name_id)
                 .maybeSingle();
 
-            if (nameData?.phonetic_hint) {
-                // Strip hyphens for "Flow State" to avoid micro-pauses
-                textToSpeak = nameData.phonetic_hint.replace(/-/g, ' ');
-                console.log(`Using phonetic_hint override for name_id ${name_id} (cleaned): ${textToSpeak}`);
+            if (nameData) {
+                if (nameData.phonetic_hint) {
+                    textToSpeak = nameData.phonetic_hint.replace(/-/g, ' ');
+                    console.log(`🔠 Using name-specific phonetic override: ${textToSpeak}`);
+                }
+
+                const s = nameData.tts_settings || {};
+                if (finalStability === undefined) finalStability = s.stability;
+                if (finalSpeed === undefined) finalSpeed = s.speed;
+                if (!voice_id) finalVoiceId = s.voice_id || finalVoiceId;
             }
         }
 
@@ -79,12 +95,12 @@ export async function POST(req: NextRequest) {
 
         const client = new ElevenLabsClient({ apiKey });
 
-        // Use overrides if provided, else defaults
-        const stability = typeof stabilityOverride === 'number' ? stabilityOverride : 0.8;
-        const speed = typeof speedOverride === 'number' ? speedOverride : 0.9;
+        // Use defaults if still undefined
+        const stability = typeof finalStability === 'number' ? finalStability : 0.8;
+        const speed = typeof finalSpeed === 'number' ? finalSpeed : 0.9;
 
-        // Apply 200ms pause and 0.9 speed for better flow
-        const audioStream = await client.textToSpeech.convert(voice_id || "it5NMxoQQ2INIh4XcO44", {
+        // Apply 200ms pause for better flow
+        const audioStream = await client.textToSpeech.convert(finalVoiceId, {
             text: `<break time="200ms"/>${textToSpeak}`,
             model_id: "eleven_multilingual_v2",
             output_format: "mp3_44100_128",

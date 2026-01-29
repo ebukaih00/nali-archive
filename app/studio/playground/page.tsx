@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Volume2, Settings2, Sliders, MessageSquare, Info, History } from 'lucide-react';
+import { Play, Volume2, Settings2, Sliders, MessageSquare, Info, History, Search, Save, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { searchTuningNames, saveTuningFormula } from '../actions';
 
 const NIGERIAN_VOICES = [
     { id: "it5NMxoQQ2INIh4XcO44", name: "Fisayo (Deep / Warm)", description: "Great for Igbo and Yoruba male names." },
@@ -12,19 +13,86 @@ const NIGERIAN_VOICES = [
 ];
 
 export default function PronunciationPlayground() {
-    const [text, setText] = useState('Adébùkọ́lá');
-    const [phonetic, setPhonetic] = useState('Ah-deh-boo-kaw-lah');
+    const [text, setText] = useState('');
+    const [selectedNameId, setSelectedNameId] = useState<string | null>(null);
+    const [phonetic, setPhonetic] = useState('');
     const [voice, setVoice] = useState(NIGERIAN_VOICES[0].id);
     const [stability, setStability] = useState(0.8);
     const [speed, setSpeed] = useState(0.9);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<any[]>([]);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [history, setHistory] = useState<{ text: string, phonetic: string, stability: number, speed: number }[]>([]);
+
+    // Rule Logic
+    const [applyRule, setApplyRule] = useState(false);
+    const [ruleType, setRuleType] = useState<'prefix' | 'suffix' | 'equals'>('prefix');
+    const [rulePattern, setRulePattern] = useState('');
+
+    useEffect(() => {
+        const delaySearch = setTimeout(async () => {
+            if (text.length >= 2 && !selectedNameId) {
+                setIsSearching(true);
+                try {
+                    const results = await searchTuningNames(text);
+                    setSearchResults(results);
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setIsSearching(false);
+                }
+            } else {
+                setSearchResults([]);
+            }
+        }, 500);
+        return () => clearTimeout(delaySearch);
+    }, [text, selectedNameId]);
+
+    const selectName = (item: any) => {
+        setSelectedNameId(item.id);
+        setText(item.name);
+        setPhonetic(item.phonetic_hint || '');
+        if (item.tts_settings) {
+            setStability(item.tts_settings.stability ?? 0.8);
+            setSpeed(item.tts_settings.speed ?? 0.9);
+            setVoice(item.tts_settings.voice_id ?? NIGERIAN_VOICES[0].id);
+        }
+        setSearchResults([]);
+
+        // Suggest a rule pattern
+        const firstThree = item.name.substring(0, 3);
+        setRulePattern(firstThree);
+    };
+
+    const handleSave = async () => {
+        if (!selectedNameId) {
+            alert("Please select a name from the search results first.");
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            await saveTuningFormula({
+                nameId: selectedNameId,
+                phonetic,
+                settings: { stability, speed, voice_id: voice },
+                ruleType: applyRule ? ruleType : undefined,
+                rulePattern: applyRule ? rulePattern : undefined
+            });
+            alert("Master Formula Saved! This name is now verified and optimized.");
+        } catch (error: any) {
+            alert(`Error saving: ${error.message}`);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const playAudio = async (usePhonetic: boolean) => {
         setIsPlaying(true);
         try {
-            const response = await fetch('/api/pronounce', {
+            const response = await fetch(`/api/pronounce?v=${Date.now()}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -32,6 +100,7 @@ export default function PronunciationPlayground() {
                     voice_id: voice,
                     stability,
                     speed,
+                    name_id: selectedNameId, // Pass ID to apply rules/overrides
                     bypass_cache: true // Always fresh for playground
                 })
             });
@@ -72,16 +141,51 @@ export default function PronunciationPlayground() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     {/* Left Side: Tuning Controls */}
                     <div className="space-y-8">
-                        {/* Name Input */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#F0EBE6]">
-                            <label className="block text-sm font-bold uppercase tracking-wider text-[#9E958F] mb-4">The Name</label>
-                            <input
-                                type="text"
-                                value={text}
-                                onChange={(e) => setText(e.target.value)}
-                                className="w-full text-2xl font-serif bg-transparent border-none focus:ring-0 text-[#2C2420]"
-                                placeholder="Enter name..."
-                            />
+                        {/* Name Input & Search */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#F0EBE6] relative">
+                            <label className="block text-sm font-bold uppercase tracking-wider text-[#9E958F] mb-4">Search a Name to Tune</label>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={text}
+                                    onChange={(e) => {
+                                        setText(e.target.value);
+                                        setSelectedNameId(null);
+                                    }}
+                                    className="w-full text-2xl font-serif bg-transparent border-none focus:ring-0 text-[#2C2420] pl-10"
+                                    placeholder="Start typing a name..."
+                                />
+                                <Search className="absolute left-0 top-1/2 -translate-y-1/2 w-6 h-6 text-[#9E958F]" />
+                                {isSearching && <Loader2 className="absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-primary" />}
+                            </div>
+
+                            {/* Search Results Dropdown */}
+                            {searchResults.length > 0 && (
+                                <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-[#F0EBE6] z-50 max-h-64 overflow-auto py-2">
+                                    {searchResults.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => selectName(item)}
+                                            className="w-full px-6 py-3 text-left hover:bg-[#FDFCFB] border-b border-[#F0EBE6] last:border-0 flex justify-between items-center group"
+                                        >
+                                            <div>
+                                                <div className="font-serif font-bold text-[#2C2420]">{item.name}</div>
+                                                <div className="text-xs text-[#9E958F]">{item.origin}</div>
+                                            </div>
+                                            <div className="text-[10px] font-sans font-bold text-primary opacity-0 group-hover:opacity-100 uppercase tracking-widest">
+                                                Select
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {selectedNameId && (
+                                <div className="mt-4 flex items-center gap-2 px-3 py-1 bg-[#F5FEEF] text-[#2D5A27] text-xs font-bold rounded-full w-fit">
+                                    <Check className="w-3 h-3" />
+                                    Connected to Database
+                                </div>
+                            )}
                         </div>
 
                         {/* Phonetic Tuning */}
@@ -180,6 +284,58 @@ export default function PronunciationPlayground() {
                                     <span>Slower</span>
                                     <span>Faster</span>
                                 </div>
+                            </div>
+
+                            {/* SAVE FORMULA SECTION */}
+                            <div className="pt-6 border-t border-[#F0EBE6] space-y-4">
+                                <div className="flex items-start gap-3 p-4 bg-[#FDFCFB] rounded-2xl border border-[#F0EBE6]">
+                                    <input
+                                        type="checkbox"
+                                        id="applyRule"
+                                        checked={applyRule}
+                                        onChange={(e) => setApplyRule(e.target.checked)}
+                                        className="mt-1 w-4 h-4 rounded text-primary border-gray-300 focus:ring-primary"
+                                    />
+                                    <div className="flex-1">
+                                        <label htmlFor="applyRule" className="text-sm font-bold text-[#4e3629] block mb-1">Apply to similar names</label>
+                                        <p className="text-[10px] text-[#9E958F] mb-3">Save these settings as a global pattern for this prefix/suffix.</p>
+
+                                        {applyRule && (
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <select
+                                                    value={ruleType}
+                                                    onChange={(e: any) => setRuleType(e.target.value)}
+                                                    className="text-xs bg-white border border-[#E9E4DE] rounded-lg p-2 outline-none focus:border-primary"
+                                                >
+                                                    <option value="prefix">Prefix (Starts with)</option>
+                                                    <option value="suffix">Suffix (Ends with)</option>
+                                                    <option value="equals">Exact (Matches)</option>
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    value={rulePattern}
+                                                    onChange={(e) => setRulePattern(e.target.value)}
+                                                    className="text-xs bg-white border border-[#E9E4DE] rounded-lg p-2 outline-none focus:border-primary font-bold"
+                                                    placeholder="Pattern..."
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleSave}
+                                    disabled={isSaving || !selectedNameId}
+                                    className="w-full py-4 bg-[#2C2420] text-white rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-[#1a1614] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg shadow-[#2C2420]/20"
+                                >
+                                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                                    Save as Master Formula
+                                </button>
+                                {!selectedNameId && (
+                                    <p className="text-center text-[10px] text-red-500 font-bold uppercase tracking-widest">
+                                        Select a name from results to enable saving
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
