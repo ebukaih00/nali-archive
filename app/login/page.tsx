@@ -5,13 +5,13 @@ import { createClient } from '@/utils/supabase/client';
 import { Loader2, Mail, Check, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { validateLoginEmail } from '@/app/auth/actions';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-    const [checkingAuth, setCheckingAuth] = useState(true);
     const router = useRouter();
     const supabase = createClient();
 
@@ -31,6 +31,19 @@ export default function LoginPage() {
         setMessage(null);
 
         try {
+            // 1. Pre-authentication check
+            const { allowed, message: authMessage } = await validateLoginEmail(email);
+
+            if (!allowed) {
+                setMessage({
+                    type: 'error',
+                    text: authMessage || 'Your account is not approved for login.'
+                });
+                setLoading(false);
+                return;
+            }
+
+            // 2. Clear to send magic link
             const { error } = await supabase.auth.signInWithOtp({
                 email,
                 options: {
@@ -78,7 +91,7 @@ export default function LoginPage() {
                                 onClick={() => setMessage(null)}
                                 className="text-primary hover:underline text-sm"
                             >
-                                Try clear
+                                Try again
                             </button>
                         </div>
                     ) : (
@@ -108,7 +121,7 @@ export default function LoginPage() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full py-4 bg-primary text-white font-medium text-lg rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                className="w-full py-4 bg-[#4e3629] text-white font-medium text-lg rounded-xl hover:bg-[#3d2b21] transition-colors shadow-lg shadow-[#4e3629]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send Magic Link'}
                             </button>
