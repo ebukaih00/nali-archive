@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
 
         // Use defaults if still undefined
         const stability = typeof finalStability === 'number' ? finalStability : 0.8;
-        const speed = typeof finalSpeed === 'number' ? finalSpeed : 0.9;
+        const speed = typeof finalSpeed === 'number' ? finalSpeed : 0.75;
 
         // Apply 200ms pause for better flow
         const audioStream = await client.textToSpeech.convert(finalVoiceId, {
