@@ -78,8 +78,8 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     const { data: assignedItems } = await supabase
         .from('names')
         .select('id, origin, status')
-        .eq('assigned_to', user.email!)
-        .eq('status', 'pending')
+        .ilike('assigned_to', user.email!)
+        .or('status.eq.pending,status.eq.unverified')
         .eq('ignored', false);
 
     // 3. Fetch all pending audio submissions (Open Queue) - ADMIN ONLY
@@ -176,8 +176,8 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
         const { data: assigned } = await supabase
             .from('names')
             .select('id, name, origin, meaning, phonetic_hint')
-            .eq('assigned_to', user.email!)
-            .eq('status', 'pending')
+            .ilike('assigned_to', user.email!)
+            .or('status.eq.pending,status.eq.unverified')
             .eq('ignored', false)
             .limit(50);
 
@@ -355,7 +355,7 @@ export async function updateSubmission(taskId: string, formData: FormData) {
             .from('names')
             .update(updates)
             .eq('id', taskId)
-            .eq('assigned_to', user.email!);
+            .ilike('assigned_to', user.email!);
 
         if (nameError) throw nameError;
 
