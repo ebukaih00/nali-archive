@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url);
@@ -8,7 +9,6 @@ export async function GET(request: Request) {
     const next = searchParams.get('next') ?? '/studio/library';
 
     // Determine the redirect origin based on the environment
-    // Use origin as fallback but prioritize naliproject.org in production
     const isProduction = process.env.NODE_ENV === 'production' || request.headers.get('host')?.includes('naliproject.org');
     const redirectBase = isProduction ? 'https://naliproject.org' : origin;
 
@@ -20,20 +20,31 @@ export async function GET(request: Request) {
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user) {
+                console.log(`🔑 Auth success for ${user.email}. Syncing profile...`);
+
+                // Use ADMIN client to bypass RLS for role upgrades
                 // 1. Fetch user profile
-                const { data: profile } = await supabase
+                const { data: profile, error: profileError } = await supabaseAdmin
                     .from('profiles')
                     .select('id, role, languages')
                     .eq('id', user.id)
                     .single();
 
+                if (profileError && profileError.code !== 'PGRST116') {
+                    console.error("❌ Error fetching profile:", profileError);
+                }
+
                 // 2. Fetch approved contributor application
-                const { data: application } = await supabase
+                const { data: application, error: appError } = await supabaseAdmin
                     .from('contributor_applications')
                     .select('languages')
                     .eq('email', user.email)
                     .eq('status', 'approved')
                     .single();
+
+                if (appError && appError.code !== 'PGRST116') {
+                    console.error("❌ Error fetching application:", appError);
+                }
 
                 const languages = application?.languages || profile?.languages || null;
 
@@ -45,26 +56,36 @@ export async function GET(request: Request) {
                         allowAccess = true;
                         // Sync languages if missing
                         if (!profile.languages && languages) {
-                            await supabase.from('profiles').update({ languages }).eq('id', user.id);
+                            await supabaseAdmin.from('profiles').update({ languages }).eq('id', user.id);
                         }
                     } else if (profile.role === 'user' && application) {
-                        // Upgrade un-approved user to contributor if they now have an approved application
-                        await supabase.from('profiles').update({ role: 'contributor', languages }).eq('id', user.id);
-                        allowAccess = true;
+                        // UPGRADE: Un-approved user now has an approved application
+                        console.log(`🚀 Upgrading user ${user.email} to contributor role.`);
+                        const { error: upgradeError } = await supabaseAdmin
+                            .from('profiles')
+                            .update({ role: 'contributor', languages })
+                            .eq('id', user.id);
+
+                        if (upgradeError) console.error("❌ Upgrade failed:", upgradeError);
+                        else allowAccess = true;
                     }
                 } else if (application) {
-                    // Create new contributor profile for first-time approved login
-                    await supabase.from('profiles').insert({
+                    // INITIAL: Create new contributor profile
+                    console.log(`✨ Creating first-time contributor profile for ${user.email}.`);
+                    const { error: insertError } = await supabaseAdmin.from('profiles').insert({
                         id: user.id,
                         role: 'contributor',
                         languages: languages
                     });
-                    allowAccess = true;
+
+                    if (insertError) console.error("❌ Profile creation failed:", insertError);
+                    else allowAccess = true;
                 }
 
                 if (allowAccess) {
                     return NextResponse.redirect(new URL(next, redirectBase));
                 } else {
+                    console.warn(`🛑 Access denied for ${user.email}. No approved application found.`);
                     return NextResponse.redirect(new URL('/unauthorized', redirectBase));
                 }
             }
