@@ -82,24 +82,28 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
         .eq('status', 'pending')
         .eq('ignored', false);
 
-    // 3. Fetch all pending audio submissions (Open Queue)
-    const { data, error } = await supabase
-        .from('audio_submissions')
-        .select(`
-            id, 
-            locked_by, 
-            locked_at, 
-            status,
-            names!inner (id, origin, assigned_to, ignored)
-        `)
-        .eq('status', 'pending')
-        .is('names.assigned_to', null) // Only show unassigned in open queue
-        .eq('names.ignored', false)
-        .limit(2000);
+    // 3. Fetch all pending audio submissions (Open Queue) - ADMIN ONLY
+    let data: any[] = [];
+    if (isAdmin) {
+        const { data: openQueue, error } = await supabase
+            .from('audio_submissions')
+            .select(`
+                id, 
+                locked_by, 
+                locked_at, 
+                status,
+                names!inner (id, origin, assigned_to, ignored)
+            `)
+            .eq('status', 'pending')
+            .is('names.assigned_to', null) // Only show unassigned in open queue
+            .eq('names.ignored', false)
+            .limit(2000);
 
-    if (error) {
-        console.error("Error fetching batches:", error);
-        return {};
+        if (error) {
+            console.error("Error fetching batches:", error);
+        } else {
+            data = openQueue || [];
+        }
     }
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).getTime();
@@ -269,32 +273,48 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
     const { supabase, user } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
-    const { data: current, error: fetchError } = await supabase
+    // Attempt to find as audio_submission first
+    const { data: submission } = await supabase
         .from('audio_submissions')
-        .select('verification_count, name_id')
+        .select('id, verification_count, name_id')
         .eq('id', taskId)
         .single();
 
-    if (fetchError) throw fetchError;
+    if (submission) {
+        const newCount = (submission.verification_count || 0) + (action === 'approved' ? 1 : 0);
+        const { error } = await supabase
+            .from('audio_submissions')
+            .update({
+                status: action === 'approved' ? 'approved' : 'rejected',
+                verification_count: newCount
+            })
+            .eq('id', taskId)
+            .eq('locked_by', user.id);
 
-    const newCount = (current?.verification_count || 0) + (action === 'approved' ? 1 : 0);
+        if (error) throw error;
 
-    const { error } = await supabase
-        .from('audio_submissions')
-        .update({
-            status: action === 'approved' ? 'approved' : 'rejected',
-            verification_count: newCount
-        })
-        .eq('id', taskId)
-        .eq('locked_by', user.id);
-
-    if (error) throw error;
-
-    if (action === 'approved' && current.name_id) {
-        await supabase
+        if (action === 'approved' && submission.name_id) {
+            await supabase
+                .from('names')
+                .update({ verification_status: 'verified' })
+                .eq('id', submission.name_id);
+        }
+    } else {
+        // Direct name assignment (taskId is name_id)
+        const { error: nameError } = await supabase
             .from('names')
-            .update({ verification_status: 'verified' })
-            .eq('id', current.name_id);
+            .update({
+                verification_status: action === 'approved' ? 'verified' : 'pending',
+                status: action === 'approved' ? 'verified' : 'pending',
+                ignored: action === 'rejected'
+            })
+            .eq('id', taskId)
+            .eq('assigned_to', user.email!);
+
+        if (nameError) {
+            // If it's not a name either, then we fail
+            throw new Error("Task not found");
+        }
     }
 
     revalidatePath('/studio/library');
