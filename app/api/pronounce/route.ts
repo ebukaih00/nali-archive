@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
         // 2. Fetch phonetic overrides and settings
         let textToSpeak = text;
-        let finalVoiceId = voice_id || "it5NMxoQQ2INIh4XcO44";
+        let finalVoiceId = voice_id || "it5NMxoQQ2INIh4XcO44"; // Fisayo Global Default
         let finalStability = stabilityOverride;
         let finalSpeed = speedOverride;
 
