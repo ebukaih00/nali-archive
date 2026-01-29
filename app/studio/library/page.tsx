@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 // import { useRouter } from 'next/navigation'; // Not currently used
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper } from 'lucide-react';
+import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Sliders } from 'lucide-react';
 import { getPendingBatches, claimBatch as claimBatchAction, submitReview, updateSubmission, releaseLocks, resetSubmission, type BatchCard, type Task } from '../actions';
 import confetti from 'canvas-confetti';
 
@@ -577,13 +578,18 @@ export default function DashboardPage() {
     return (
         <main className="min-h-screen bg-[#F8F7F5] p-6 md:p-12 font-serif">
             <header className="max-w-5xl mx-auto mb-16">
-                <span className="inline-block px-3 py-1 rounded-full text-xs font-sans font-bold bg-[#E9E4DE] text-[#5D4037] uppercase tracking-wider mb-4">
-                    Contributor Studio
-                </span>
-                <h1 className="text-4xl md:text-5xl text-[#2C2420] mb-4">The Library</h1>
-                <p className="text-[#4e3629] font-sans text-lg md:whitespace-nowrap">
-                    Select a batch to verify. Batches are locked to you for 2 hours once claimed.
-                </p>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+                    <div>
+                        <span className="inline-block px-3 py-1 rounded-full text-xs font-sans font-bold bg-[#E9E4DE] text-[#5D4037] uppercase tracking-wider mb-4">
+                            Contributor Studio
+                        </span>
+                        <h1 className="text-4xl md:text-5xl text-[#2C2420] mb-4">The Library</h1>
+                        <p className="text-[#4e3629] font-sans text-lg md:whitespace-nowrap">
+                            Select a batch to verify. Batches are locked to you for 2 hours once claimed.
+                        </p>
+                    </div>
+
+                </div>
             </header>
 
             <div className="max-w-5xl mx-auto space-y-12">

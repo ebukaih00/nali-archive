@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase-server';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 
 export interface BatchCard {
     id: string;
@@ -23,21 +24,54 @@ export interface Task {
     status: 'pending' | 'approved' | 'rejected' | 'edited';
 }
 
-export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> {
+/**
+ * Shared Auth Helper: Handles real users and Demo Mode bypass
+ */
+async function getAuth() {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const cookieStore = await cookies();
+    const isDemoMode = cookieStore.get('nali_demo_mode')?.value === 'true';
 
-    if (!user) return {};
+    if (!authUser && !isDemoMode) {
+        return { supabase, user: null, isAdmin: false };
+    }
 
-    // 1. Fetch user's profile to get their languages and role
+    // Mock for Demo Mode
+    const user = authUser || { id: '00000000-0000-0000-0000-000000000000', email: 'dev@nali.org' };
+
+    // Fetch profile for role/languages
     const { data: profile } = await supabase
         .from('profiles')
         .select('role, languages')
         .eq('id', user.id)
         .single();
 
-    const allowedLanguages = profile?.languages ? (profile.languages as any[]).map(l => l.language.toLowerCase()) : [];
-    const isAdmin = profile?.role === 'admin';
+    // FALLBACK: If profile languages are missing, fetch from application
+    let languages: string[] = [];
+    if (profile?.languages) {
+        languages = (profile.languages as any[]).map(l => l.language.toLowerCase());
+    } else {
+        const { data: application } = await supabase
+            .from('contributor_applications')
+            .select('languages')
+            .ilike('email', user.email!)
+            .eq('status', 'approved')
+            .single();
+
+        if (application?.languages) {
+            languages = (application.languages as any[]).map(l => l.language.toLowerCase());
+        }
+    }
+
+    const isAdmin = isDemoMode || profile?.role === 'admin';
+
+    return { supabase, user, isAdmin, languages };
+}
+
+export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> {
+    const { supabase, user, isAdmin, languages: allowedLanguages } = await getAuth();
+    if (!user) return {};
 
     // 2. Fetch all pending audio submissions
     const { data, error } = await supabase
@@ -62,14 +96,14 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
 
     data.forEach((item: any) => {
         const lockedAt = item.locked_at ? new Date(item.locked_at).getTime() : 0;
-        const isLockedByOther = item.locked_by && item.locked_by !== user?.id && lockedAt > twoHoursAgo;
+        const isLockedByOther = item.locked_by && item.locked_by !== user.id && lockedAt > twoHoursAgo;
 
         if (!isLockedByOther) {
             const lang = item.names?.origin || 'Uncategorized';
 
-            // FILTER LOGIC:
-            // Skip if user is NOT admin AND this language isn't in their allowed list
-            if (!isAdmin && allowedLanguages.length > 0) {
+            // FILTER LOGIC
+            if (!isAdmin) {
+                if (allowedLanguages.length === 0) return; // Show nothing if no expertise identified
                 const isAllowed = allowedLanguages.some(al => lang.toLowerCase().includes(al));
                 if (!isAllowed) return;
             }
@@ -88,14 +122,14 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
 
         for (let i = 0; i < batchCount; i++) {
             const chunk = items.slice(i * 50, (i + 1) * 50);
-            const lockedByMe = chunk.some((x: any) => x.locked_by === user?.id);
+            const lockedByMe = chunk.some((x: any) => x.locked_by === user.id);
 
             cards.push({
                 id: `batch-${lang}-${i}`,
                 language: lang,
                 title: `${lang} Batch #${i + 1}`,
                 count: chunk.length,
-                lockedBy: lockedByMe ? user?.id || 'me' : null,
+                lockedBy: lockedByMe ? user.id : null,
                 isLockedByMe: lockedByMe
             });
         }
@@ -106,16 +140,12 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
 }
 
 export async function claimBatch(language: string): Promise<{ tasks: Task[], expiry: number }> {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const { supabase, user } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
 
-    // 1. Check if user already has locked items for this language (Resume)
-    // Attempt to fetch items already locked by me
     const { data: myLocked, error: myLockedError } = await supabase
         .from('audio_submissions')
         .select(`
@@ -130,8 +160,6 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     let tasksData = myLocked;
 
     if (!tasksData || tasksData.length === 0) {
-        // 2. Lock new items
-        // Find top 50 available
         const { data: available, error: availError } = await supabase
             .from('audio_submissions')
             .select(`id, names!inner(origin)`)
@@ -148,7 +176,6 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
 
         const idsToLock = available.map((x: any) => x.id);
 
-        // Perform Lock
         const { error: lockError } = await supabase
             .from('audio_submissions')
             .update({
@@ -159,7 +186,6 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
 
         if (lockError) throw lockError;
 
-        // Fetch details
         const { data: newLocked, error: fetchError } = await supabase
             .from('audio_submissions')
             .select(`
@@ -172,7 +198,6 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
         tasksData = newLocked;
     }
 
-    // Map to Task
     const tasks: Task[] = tasksData.map((d: any) => ({
         id: d.id,
         name: d.names.name,
@@ -190,12 +215,10 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     };
 }
 
-export async function submitReview(taskId: string, action: 'approved' | 'rejected', data?: { phonetic?: string }) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+export async function submitReview(taskId: string, action: 'approved' | 'rejected') {
+    const { supabase, user } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
-    // First get current count and name_id
     const { data: current, error: fetchError } = await supabase
         .from('audio_submissions')
         .select('verification_count, name_id')
@@ -204,23 +227,19 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
 
     if (fetchError) throw fetchError;
 
-    // Increment verification count if approved
     const newCount = (current?.verification_count || 0) + (action === 'approved' ? 1 : 0);
-
-    const updatePayload: any = {
-        status: action === 'approved' ? 'approved' : 'rejected',
-        verification_count: newCount
-    };
 
     const { error } = await supabase
         .from('audio_submissions')
-        .update(updatePayload)
+        .update({
+            status: action === 'approved' ? 'approved' : 'rejected',
+            verification_count: newCount
+        })
         .eq('id', taskId)
         .eq('locked_by', user.id);
 
     if (error) throw error;
 
-    // If approved, instantly verify the name so it goes live
     if (action === 'approved' && current.name_id) {
         await supabase
             .from('names')
@@ -232,8 +251,7 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
 }
 
 export async function updateSubmission(taskId: string, formData: FormData) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { supabase, user } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
     const phonetic = formData.get('phonetic') as string;
@@ -253,10 +271,7 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         audioUrl = publicUrl;
     }
 
-    // Editing implies approval/verification of the changes
-    const updates: any = {
-        status: 'edited'
-    };
+    const updates: any = { status: 'edited' };
     if (audioUrl) updates.audio_url = audioUrl;
     if (phonetic) updates.phonetic_hint = phonetic;
 
@@ -268,16 +283,14 @@ export async function updateSubmission(taskId: string, formData: FormData) {
 
     if (error) throw error;
 
-    revalidatePath('/dashboard');
+    revalidatePath('/studio/library');
     return { success: true };
 }
 
 export async function resetSubmission(taskId: string) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { supabase, user } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
-    // Fetch current to decrement count if it was approved
     const { data: current, error: fetchError } = await supabase
         .from('audio_submissions')
         .select('verification_count, status, name_id')
@@ -290,10 +303,7 @@ export async function resetSubmission(taskId: string) {
     if (current.status === 'approved' && newCount > 0) {
         newCount = newCount - 1;
     }
-    // If 'edited', we didn't strictly increment count in updateSubmission (current implementation)
-    // so we don't decrement. But if we change logic later, revisit.
 
-    // Fetch the original phonetic hint from the names table
     const { data: nameData, error: nameError } = await supabase
         .from('names')
         .select('phonetic_hint')
@@ -317,8 +327,7 @@ export async function resetSubmission(taskId: string) {
 }
 
 export async function releaseLocks() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { supabase, user } = await getAuth();
     if (!user) return;
 
     await supabase

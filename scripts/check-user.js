@@ -50,4 +50,5 @@ async function checkUser(email) {
     }
 }
 
-checkUser('ihuezeebuka5@gmail.com');
+const emailArg = process.argv[2] || 'ihuezeebuka5@gmail.com';
+checkUser(emailArg);

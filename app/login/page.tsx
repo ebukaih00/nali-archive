@@ -125,6 +125,22 @@ export default function LoginPage() {
                             >
                                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send Magic Link'}
                             </button>
+
+                            {/* Dev Bypass Button (Only in Dev) */}
+                            {process.env.NODE_ENV === 'development' && (
+                                <div className="pt-4 border-t border-dashed border-primary/20">
+                                    <button
+                                        type="button"
+                                        onClick={() => window.location.href = '/studio/library?dev=true'}
+                                        className="w-full py-3 border-2 border-dashed border-primary/20 text-primary/60 font-medium rounded-xl hover:border-primary/40 hover:text-primary transition-all flex items-center justify-center gap-2 text-sm"
+                                    >
+                                        Dev Access (No Login)
+                                    </button>
+                                    <p className="text-center text-[10px] text-secondary/40 mt-2 uppercase tracking-widest font-bold">
+                                        Developer Test Environment Only
+                                    </p>
+                                </div>
+                            )}
                         </form>
                     )}
                 </div>

@@ -41,6 +41,10 @@ async function approveContributor(email: string) {
     // 3. Send Magic Link / Invite
     console.log(`📧 Sending magic link to ${email}...`);
 
+    // Determine redirect base based on APP_URL env var or fallback to localhost
+    const redirectBase = process.env.APP_URL || 'http://localhost:3000';
+    const redirectTo = `${redirectBase}/auth/callback?next=/studio/library`;
+
     // Note: Since this is server-side via admin client, we use admin.generateLink or similar 
     // but for simplicity and to match the existing magic link style, we can use signInWithOtp
     // However, for a true "First Time Admin Approval", we might want to ensure the user profile is created too.
@@ -50,7 +54,7 @@ async function approveContributor(email: string) {
         options: {
             // Note: Use 'https://naliproject.org' for live users.
             // If testing locally on a specific port (e.g. 3001), update this accordingly.
-            emailRedirectTo: `https://naliproject.org/auth/callback?next=/studio/library`,
+            emailRedirectTo: redirectTo,
         },
     });
 

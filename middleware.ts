@@ -34,18 +34,34 @@ export async function middleware(request: NextRequest) {
         request.nextUrl.pathname.startsWith('/unauthorized') ||
         request.nextUrl.pathname === '/';
 
+    // 3. Dev/Demo Bypass Toggle
+    const devParam = request.nextUrl.searchParams.get('dev');
+    if (devParam === 'true') {
+        const url = new URL(request.url);
+        url.searchParams.delete('dev');
+        const redirectResponse = NextResponse.redirect(url);
+        redirectResponse.cookies.set('nali_demo_mode', 'true', { maxAge: 60 * 60 * 24 });
+        return redirectResponse;
+    } else if (devParam === 'false') {
+        const url = new URL(request.url);
+        url.searchParams.delete('dev');
+        const redirectResponse = NextResponse.redirect(url);
+        redirectResponse.cookies.delete('nali_demo_mode');
+        return redirectResponse;
+    }
+
     if (isPublicPath) {
         return response;
     }
 
-    // 3. Refresh Session
+    // 4. Refresh Session
     // This will refresh the session if needed and update cookies
     const { data: { user } } = await supabase.auth.getUser()
 
     // 4. Protect /studio Route
     if (request.nextUrl.pathname.startsWith('/studio')) {
         // DEMO BYPASS
-        if (request.cookies.get('nali_demo_mode')) {
+        if (request.cookies.get('nali_demo_mode') || devParam === 'true') {
             return response;
         }
 

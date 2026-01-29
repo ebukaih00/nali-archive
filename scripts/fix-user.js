@@ -63,4 +63,5 @@ async function fixUser(email) {
     }
 }
 
-fixUser('ihuezeebuka5@gmail.com');
+const emailArg = process.argv[2] || 'ihuezeebuka5@gmail.com';
+fixUser(emailArg);

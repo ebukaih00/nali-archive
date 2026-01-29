@@ -12,10 +12,13 @@ async function resendLink(email: string) {
 
     console.log(`📧 Resending fresh magic link to ${email}...`);
 
+    const redirectBase = process.env.APP_URL || 'http://localhost:3000';
+    const redirectTo = `${redirectBase}/auth/callback?next=/studio/library`;
+
     const { error: authError } = await supabaseAdmin.auth.signInWithOtp({
         email,
         options: {
-            emailRedirectTo: `https://naliproject.org/auth/callback?next=/studio/library`,
+            emailRedirectTo: redirectTo,
         },
     });
 
