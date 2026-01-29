@@ -95,6 +95,7 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
                 names!inner (id, origin, assigned_to, ignored)
             `)
             .eq('status', 'pending')
+            .is('names.assigned_to', null) // Only show unassigned in open queue
             .eq('names.ignored', false)
             .limit(2000);
 
@@ -123,13 +124,6 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
         const isLockedByOther = item.locked_by && item.locked_by !== user.id && lockedAt > twoHoursAgo;
 
         if (!isLockedByOther) {
-            // ADMIN REVIEWS GO TO A SPECIAL GROUP
-            if (isAdmin && item.names?.assigned_to) {
-                if (!groups['Submitted for Review']) groups['Submitted for Review'] = [];
-                groups['Submitted for Review'].push(item);
-                return;
-            }
-
             const lang = item.names?.origin || 'Uncategorized';
 
             // FILTER LOGIC
@@ -181,7 +175,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     if (language === 'My Assignments') {
         const { data: assigned } = await supabase
             .from('names')
-            .select('id, name, origin, meaning, phonetic_hint, audio_url')
+            .select('id, name, origin, meaning, phonetic_hint')
             .ilike('assigned_to', user.email!)
             .or('status.eq.pending,status.eq.unverified')
             .eq('ignored', false)
@@ -193,7 +187,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
                 name: d.name,
                 origin: d.origin,
                 meaning: d.meaning || "No meaning provided",
-                audioUrl: d.audio_url || '',
+                audioUrl: '', // No audio yet for assigned names
                 status: 'pending',
                 phonetic_hint: d.phonetic_hint || '',
                 original_phonetics: d.phonetic_hint || '',
@@ -218,20 +212,12 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     let tasksData = myLocked;
 
     if (!tasksData || tasksData.length === 0) {
-        let query = supabase
+        const { data: available, error: availError } = await supabase
             .from('audio_submissions')
-            .select(`id, names!inner(origin, assigned_to)`)
-            .eq('status', 'pending');
-
-        if (language === 'Submitted for Review') {
-            // Special Case: All assigned submissions pending review
-            query = query.not('names.assigned_to', 'is', null);
-        } else {
-            // Standard Case: Tribal batch
-            query = query.eq('names.origin', language).is('names.assigned_to', null);
-        }
-
-        const { data: available, error: availError } = await query
+            .select(`id, names!inner(origin)`)
+            .eq('status', 'pending')
+            .eq('names.origin', language)
+            .is('names.assigned_to', null) // Only unassigned
             .eq('names.ignored', false)
             .or(`locked_by.is.null,locked_at.lt.${twoHoursAgo}`)
             .limit(50);
@@ -308,21 +294,9 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
         if (error) throw error;
 
         if (action === 'approved' && submission.name_id) {
-            // Get the submission details to promote
-            const { data: fullSub } = await supabase
-                .from('audio_submissions')
-                .select('audio_url, phonetic_hint')
-                .eq('id', taskId)
-                .single();
-
             await supabase
                 .from('names')
-                .update({
-                    verification_status: 'verified',
-                    status: 'verified',
-                    verified_audio_url: fullSub?.audio_url || null,
-                    phonetic_hint: fullSub?.phonetic_hint || null
-                })
+                .update({ verification_status: 'verified' })
                 .eq('id', submission.name_id);
         }
     } else {
@@ -369,13 +343,13 @@ export async function updateSubmission(taskId: string, formData: FormData) {
     }
 
     if (isDirectName) {
-        // Direct assignment recording: Move to 'submitted' state for admin review
+        // Direct assignment recording: Create submission AND update name status
         const updates: any = {
-            status: 'submitted', // Hide from contributor queue
-            phonetic_hint: phonetic // Optional preview for admin
+            verification_status: 'verified',
+            status: 'verified'
         };
-        // NOTE: We do NOT update audio_url or verification_status yet.
-        // That happens when an admin approves the submission.
+        if (audioUrl) updates.audio_url = audioUrl;
+        if (phonetic) updates.phonetic_hint = phonetic;
 
         const { error: nameError } = await supabase
             .from('names')
@@ -389,10 +363,10 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         await supabase.from('audio_submissions').insert({
             name_id: taskId,
             audio_url: audioUrl,
-            status: 'pending',
+            status: 'approved',
             contributor_id: user.id,
             phonetic_hint: phonetic,
-            verification_count: 0
+            verification_count: 1
         });
     } else {
         // Standard review update
