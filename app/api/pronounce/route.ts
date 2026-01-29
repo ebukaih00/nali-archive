@@ -24,8 +24,9 @@ export async function POST(req: NextRequest) {
                 const cachedRes = await fetch(nameData.audio_url);
                 if (cachedRes.ok) {
                     const arrayBuffer = await cachedRes.arrayBuffer();
+                    const contentType = nameData.audio_url.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
                     return new NextResponse(Buffer.from(arrayBuffer), {
-                        headers: { "Content-Type": "audio/mpeg" },
+                        headers: { "Content-Type": contentType },
                     });
                 }
             }

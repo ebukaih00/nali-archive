@@ -331,7 +331,19 @@ export async function updateSubmission(taskId: string, formData: FormData) {
     let audioUrl = null;
 
     if (audioFile) {
-        const path = `submissions/${taskId}_${Date.now()}.webm`;
+        // Fetch the name string for descriptive storage
+        let nameString = 'recording';
+        if (isDirectName) {
+            const { data: n } = await supabase.from('names').select('name').eq('id', taskId).single();
+            if (n) nameString = n.name;
+        } else {
+            const { data: sub } = await supabase.from('audio_submissions').select('names(name)').eq('id', taskId).single();
+            if ((sub as any)?.names?.name) nameString = (sub as any).names.name;
+        }
+
+        const sanitizedName = nameString.replace(/[^a-zA-Z0-9]/g, '_');
+        const path = `contributor-recordings/${sanitizedName}_${taskId}_${Date.now()}.webm`;
+
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('vetting_samples')
             .upload(path, audioFile);
