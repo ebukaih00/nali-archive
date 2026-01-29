@@ -54,29 +54,71 @@ export async function GET(request: Request) {
                 if (profile) {
                     if (profile.role === 'admin' || profile.role === 'contributor') {
                         allowAccess = true;
-                        // Sync languages if missing
+                        // Sync languages if missing (gracefully handle missing column)
                         if (!profile.languages && languages) {
-                            await supabaseAdmin.from('profiles').update({ languages }).eq('id', user.id);
+                            try {
+                                const { error: lError } = await supabaseAdmin.from('profiles').update({ languages }).eq('id', user.id);
+                                if (lError && lError.message.includes('languages')) {
+                                    console.warn("⚠️ 'languages' column missing in profiles, skipping sync.");
+                                }
+                            } catch (e) { /* ignore */ }
                         }
                     } else if (profile.role === 'user' && application) {
                         // UPGRADE: Un-approved user now has an approved application
                         console.log(`🚀 Upgrading user ${user.email} to contributor role.`);
-                        const { error: upgradeError } = await supabaseAdmin
-                            .from('profiles')
-                            .update({ role: 'contributor', languages })
-                            .eq('id', user.id);
 
-                        if (upgradeError) console.error("❌ Upgrade failed:", upgradeError);
-                        else allowAccess = true;
+                        const updates: any = { role: 'contributor' };
+                        if (languages) {
+                            try {
+                                // Try initial update with languages
+                                let { error: upgradeError } = await supabaseAdmin
+                                    .from('profiles')
+                                    .update({ role: 'contributor', languages })
+                                    .eq('id', user.id);
+
+                                if (upgradeError && upgradeError.message.includes('languages')) {
+                                    console.warn("⚠️ Retrying upgrade without missing 'languages' column.");
+                                    const { error: retryError } = await supabaseAdmin
+                                        .from('profiles')
+                                        .update({ role: 'contributor' })
+                                        .eq('id', user.id);
+                                    upgradeError = retryError;
+                                }
+
+                                if (upgradeError) console.error("❌ Upgrade failed:", upgradeError);
+                                else allowAccess = true;
+                            } catch (e) {
+                                allowAccess = false;
+                            }
+                        } else {
+                            const { error: upgradeError } = await supabaseAdmin
+                                .from('profiles')
+                                .update({ role: 'contributor' })
+                                .eq('id', user.id);
+                            if (!upgradeError) allowAccess = true;
+                        }
                     }
                 } else if (application) {
                     // INITIAL: Create new contributor profile
                     console.log(`✨ Creating first-time contributor profile for ${user.email}.`);
-                    const { error: insertError } = await supabaseAdmin.from('profiles').insert({
+
+                    const insertPayload: any = {
                         id: user.id,
-                        role: 'contributor',
-                        languages: languages
-                    });
+                        role: 'contributor'
+                    };
+                    if (languages) insertPayload.languages = languages;
+
+                    let { error: insertError } = await supabaseAdmin.from('profiles').insert(insertPayload);
+
+                    // Retry without languages if column missing
+                    if (insertError && insertError.message.includes('languages')) {
+                        console.warn("⚠️ Retrying insert without missing 'languages' column.");
+                        const { error: retryError } = await supabaseAdmin.from('profiles').insert({
+                            id: user.id,
+                            role: 'contributor'
+                        });
+                        insertError = retryError;
+                    }
 
                     if (insertError) console.error("❌ Profile creation failed:", insertError);
                     else allowAccess = true;
