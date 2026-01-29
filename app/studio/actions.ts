@@ -175,7 +175,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     if (language === 'My Assignments') {
         const { data: assigned } = await supabase
             .from('names')
-            .select('id, name, origin, meaning, phonetic_hint')
+            .select('id, name, origin, meaning, phonetic_hint, audio_url')
             .ilike('assigned_to', user.email!)
             .or('status.eq.pending,status.eq.unverified')
             .eq('ignored', false)
@@ -187,7 +187,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
                 name: d.name,
                 origin: d.origin,
                 meaning: d.meaning || "No meaning provided",
-                audioUrl: '', // No audio yet for assigned names
+                audioUrl: d.audio_url || '',
                 status: 'pending',
                 phonetic_hint: d.phonetic_hint || '',
                 original_phonetics: d.phonetic_hint || '',
@@ -363,10 +363,10 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         await supabase.from('audio_submissions').insert({
             name_id: taskId,
             audio_url: audioUrl,
-            status: 'approved',
+            status: 'pending',
             contributor_id: user.id,
             phonetic_hint: phonetic,
-            verification_count: 1
+            verification_count: 0
         });
     } else {
         // Standard review update

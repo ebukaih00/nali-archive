@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 // import { useRouter } from 'next/navigation'; // Not currently used
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Trash2 } from 'lucide-react';
+import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Ban } from 'lucide-react';
 import { getPendingBatches, claimBatch as claimBatchAction, submitReview, updateSubmission, releaseLocks, resetSubmission, ignoreName, type BatchCard, type Task } from '../actions';
 import confetti from 'canvas-confetti';
 
@@ -577,7 +577,7 @@ export default function DashboardPage() {
                                                             className="p-3 rounded-xl border border-red-100 text-red-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                                                             title="Ignore / Skip"
                                                         >
-                                                            <Trash2 className="w-4 h-4" />
+                                                            <Ban className="w-4 h-4" />
                                                         </button>
                                                         <button
                                                             onClick={() => startEditing(task)}
