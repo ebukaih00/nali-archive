@@ -22,27 +22,28 @@ export async function POST(req: NextRequest) {
             // HUMAN AUDIO takes precedence
             const priorityAudio = nameData?.verified_audio_url || nameData?.audio_url;
 
-            if (priorityAudio && priorityAudio.startsWith('http')) {
-                try {
-                    console.log(`Serving cached/verified audio for name_id: ${name_id}`);
-                    const cachedRes = await fetch(priorityAudio);
-                    if (cachedRes.ok) {
-                        const arrayBuffer = await cachedRes.arrayBuffer();
-                        const contentType = priorityAudio.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
-                        return new NextResponse(Buffer.from(arrayBuffer), {
-                            headers: { "Content-Type": contentType },
-                        });
-                    }
-                } catch (fetchErr) {
-                    console.error("Cache fetch failed, falling back to AI:", fetchErr);
-                    // Fall through to AI generation
+            if (priorityAudio) {
+                console.log(`Serving cached/verified audio for name_id: ${name_id}`);
+                const cachedRes = await fetch(priorityAudio);
+                if (cachedRes.ok) {
+                    const arrayBuffer = await cachedRes.arrayBuffer();
+                    // Detect if it's a webm recording or mp3
+                    const contentType = priorityAudio.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
+                    return new NextResponse(Buffer.from(arrayBuffer), {
+                        headers: {
+                            "Content-Type": contentType,
+                            "Cache-Control": "no-cache, no-store, must-revalidate",
+                            "Pragma": "no-cache",
+                            "Expires": "0"
+                        },
+                    });
                 }
             }
         }
 
         // 2. Fetch phonetic overrides and settings
         let textToSpeak = text;
-        let finalVoiceId = voice_id || "it5NMxoQQ2INIh4XcO44"; // Fisayo Global Default
+        let finalVoiceId = voice_id || "it5NMxoQQ2INIh4XcO44";
         let finalStability = stabilityOverride;
         let finalSpeed = speedOverride;
 
@@ -106,17 +107,19 @@ export async function POST(req: NextRequest) {
 
         // Use defaults if still undefined
         const stability = typeof finalStability === 'number' ? finalStability : 0.8;
+        const speed = typeof finalSpeed === 'number' ? finalSpeed : 0.9;
 
-        // Apply a longer initial pause (500ms) to allow for clear delivery
+        // Apply 200ms pause for better flow
         const audioStream = await client.textToSpeech.convert(finalVoiceId, {
-            text: `<break time="500ms"/>${textToSpeak}.`,
+            text: `<break time="200ms"/>${textToSpeak}`,
             model_id: "eleven_multilingual_v2",
             output_format: "mp3_44100_128",
             voice_settings: {
                 stability,
                 similarity_boost: 0.95,
                 style: 0.0,
-                use_speaker_boost: true
+                use_speaker_boost: true,
+                speed
             },
         });
 

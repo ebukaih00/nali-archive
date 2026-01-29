@@ -218,12 +218,20 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     let tasksData = myLocked;
 
     if (!tasksData || tasksData.length === 0) {
-        const { data: available, error: availError } = await supabase
+        let query = supabase
             .from('audio_submissions')
-            .select(`id, names!inner(origin)`)
-            .eq('status', 'pending')
-            .eq('names.origin', language)
-            .is('names.assigned_to', null) // Only unassigned
+            .select(`id, names!inner(origin, assigned_to)`)
+            .eq('status', 'pending');
+
+        if (language === 'Submitted for Review') {
+            // Special Case: All assigned submissions pending review
+            query = query.not('names.assigned_to', 'is', null);
+        } else {
+            // Standard Case: Tribal batch
+            query = query.eq('names.origin', language).is('names.assigned_to', null);
+        }
+
+        const { data: available, error: availError } = await query
             .eq('names.ignored', false)
             .or(`locked_by.is.null,locked_at.lt.${twoHoursAgo}`)
             .limit(50);
