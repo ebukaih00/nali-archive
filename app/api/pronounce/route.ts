@@ -22,16 +22,20 @@ export async function POST(req: NextRequest) {
             // HUMAN AUDIO takes precedence
             const priorityAudio = nameData?.verified_audio_url || nameData?.audio_url;
 
-            if (priorityAudio) {
-                console.log(`Serving cached/verified audio for name_id: ${name_id}`);
-                const cachedRes = await fetch(priorityAudio);
-                if (cachedRes.ok) {
-                    const arrayBuffer = await cachedRes.arrayBuffer();
-                    // Detect if it's a webm recording or mp3
-                    const contentType = priorityAudio.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
-                    return new NextResponse(Buffer.from(arrayBuffer), {
-                        headers: { "Content-Type": contentType },
-                    });
+            if (priorityAudio && priorityAudio.startsWith('http')) {
+                try {
+                    console.log(`Serving cached/verified audio for name_id: ${name_id}`);
+                    const cachedRes = await fetch(priorityAudio);
+                    if (cachedRes.ok) {
+                        const arrayBuffer = await cachedRes.arrayBuffer();
+                        const contentType = priorityAudio.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
+                        return new NextResponse(Buffer.from(arrayBuffer), {
+                            headers: { "Content-Type": contentType },
+                        });
+                    }
+                } catch (fetchErr) {
+                    console.error("Cache fetch failed, falling back to AI:", fetchErr);
+                    // Fall through to AI generation
                 }
             }
         }
@@ -100,23 +104,19 @@ export async function POST(req: NextRequest) {
 
         const client = new ElevenLabsClient({ apiKey });
 
-        // Use defaults if still undefined and apply a global safety cap (all voices should be slower)
+        // Use defaults if still undefined
         const stability = typeof finalStability === 'number' ? finalStability : 0.8;
-        let speed = typeof finalSpeed === 'number' ? finalSpeed : 0.65;
 
-        // Ensure no voice is rushed, even if rules or overrides are present
-        speed = Math.min(speed, 0.75);
-        // Apply 200ms pause for better flow
+        // Apply a longer initial pause (500ms) to allow for clear delivery
         const audioStream = await client.textToSpeech.convert(finalVoiceId, {
-            text: `<break time="200ms"/>${textToSpeak}`,
+            text: `<break time="500ms"/>${textToSpeak}.`,
             model_id: "eleven_multilingual_v2",
             output_format: "mp3_44100_128",
             voice_settings: {
                 stability,
                 similarity_boost: 0.95,
                 style: 0.0,
-                use_speaker_boost: true,
-                speed
+                use_speaker_boost: true
             },
         });
 
