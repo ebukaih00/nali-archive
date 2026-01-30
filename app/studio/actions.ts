@@ -175,7 +175,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     if (language === 'My Assignments') {
         const { data: assigned } = await supabase
             .from('names')
-            .select('id, name, origin, meaning, phonetic_hint')
+            .select('id, name, origin, meaning, phonetic_hint, audio_url')
             .ilike('assigned_to', user.email!)
             .or('status.eq.pending,status.eq.unverified')
             .eq('ignored', false)
@@ -187,8 +187,8 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
                 name: d.name,
                 origin: d.origin,
                 meaning: d.meaning || "No meaning provided",
-                audioUrl: '', // No audio yet for assigned names
-                status: 'pending',
+                audioUrl: d.audio_url || '',
+                status: d.audio_url ? 'approved' : 'pending', // If it has audio, mark as potentially pre-approved
                 phonetic_hint: d.phonetic_hint || '',
                 original_phonetics: d.phonetic_hint || '',
                 isDirectName: true // UI helper
