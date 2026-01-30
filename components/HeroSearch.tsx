@@ -23,12 +23,11 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
     const searchParams = useSearchParams();
     const initialQuery = searchParams.get('search') || searchParams.get('name') || '';
     const [query, setQuery] = useState(initialQuery);
-    const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [result, setResult] = useState<NameEntry | null>(null);
-    const [loading, setLoading] = useState(true);
     const [searching, setSearching] = useState(false);
     const [audioPlaying, setAudioPlaying] = useState(false);
     const [suggestions, setSuggestions] = useState<NameEntry[]>([]);
+    const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [copied, setCopied] = useState(false);
     const [liked, setLiked] = useState(false);
@@ -175,70 +174,58 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
     const normalize = (text: string) =>
         text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    useEffect(() => {
-        const loadDB = async () => {
-            let allData: NameEntry[] = [];
-            let from = 0;
-            const step = 999;
-            let more = true;
-
-            try {
-                while (more) {
-                    const { data, error } = await supabase
-                        .from('names')
-                        .select('*')
-                        .eq('verification_status', 'verified')
-                        .range(from, from + step);
-
-                    if (error) throw error;
-                    if (data && data.length > 0) {
-                        allData = [...allData, ...data];
-                        from += step + 1;
-                        if (data.length < step + 1) more = false;
-                    } else {
-                        more = false;
-                    }
-                }
-                setAllNames(allData);
-            } catch (err) {
-                console.error('Failed to load names', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadDB();
-    }, []);
-
+    // Optimized Search: Fetch suggestions from DB with debouncing
     useEffect(() => {
         if (!query || result) {
             setSuggestions([]);
             return;
         }
-        const q = normalize(query);
-        const startsWith = allNames.filter(n => normalize(n.name).startsWith(q));
-        const contains = allNames.filter(n => !normalize(n.name).startsWith(q) && normalize(n.name).includes(q));
-        const matches = [...startsWith, ...contains].slice(0, 8);
-        setSuggestions(matches);
-    }, [query, allNames, result]);
 
-    const handleSearch = (entry?: NameEntry) => {
+        const handler = setTimeout(async () => {
+            setFetchingSuggestions(true);
+            try {
+                const { data, error } = await supabase
+                    .from('names')
+                    .select('id, name, origin, meaning, phonetic_hint, voice_id')
+                    .eq('verification_status', 'verified')
+                    .ilike('name', `${query}%`)
+                    .limit(8);
+
+                if (error) throw error;
+                setSuggestions(data || []);
+            } catch (err) {
+                console.error('Search error:', err);
+            } finally {
+                setFetchingSuggestions(false);
+            }
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(handler);
+    }, [query, result]);
+
+
+    const handleSearch = async (entry?: NameEntry) => {
         setSearching(true);
-        setResult(null);
         setSuggestions([]);
         setShowFeedbackForm(false);
 
-        const target = entry || allNames.find(n => normalize(n.name) === normalize(query));
-
-        if (target) {
-            setResult(target);
-            setQuery(target.name);
-            router.push(`/?search=${encodeURIComponent(target.name)}`, { scroll: false });
+        if (entry) {
+            setResult(entry);
+            setQuery(entry.name);
+            router.push(`/?search=${encodeURIComponent(entry.name)}`, { scroll: false });
         } else if (query.trim() !== '') {
-            const partial = allNames.find(n => normalize(n.name).includes(normalize(query)));
-            if (partial) {
-                setResult(partial);
-                setQuery(partial.name);
-                router.push(`/?search=${encodeURIComponent(partial.name)}`, { scroll: false });
+            // Try to find exact match in DB
+            const { data, error } = await supabase
+                .from('names')
+                .select('*')
+                .eq('verification_status', 'verified')
+                .ilike('name', query.trim())
+                .maybeSingle();
+
+            if (data) {
+                setResult(data);
+                setQuery(data.name);
+                router.push(`/?search=${encodeURIComponent(data.name)}`, { scroll: false });
             }
         }
         setSearching(false);
@@ -246,13 +233,10 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
 
     // Auto-search if query is pre-filled from URL
     useEffect(() => {
-        if (allNames.length > 0 && query && !result) {
-            const target = allNames.find(n => normalize(n.name) === normalize(query));
-            if (target) {
-                handleSearch(target);
-            }
+        if (query && !result) {
+            handleSearch();
         }
-    }, [allNames, query]);
+    }, []); // Only on mount
 
     // ... (rest of functions)
 
@@ -301,7 +285,11 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             <div className="w-full relative">
                 <div className="relative isolate group z-50">
                     <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none z-10">
-                        <Search className="w-5 h-5 text-secondary group-focus-within:text-primary transition-colors" />
+                        {fetchingSuggestions ? (
+                            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                        ) : (
+                            <Search className="w-5 h-5 text-secondary group-focus-within:text-primary transition-colors" />
+                        )}
                     </div>
                     <input
                         type="text"
@@ -392,13 +380,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                 key={name}
                                 onClick={() => {
                                     setQuery(name);
-                                    // Optimistic search if data loaded, else navigation
-                                    const entry = allNames.find(n => n.name === name);
-                                    if (entry) {
-                                        handleSearch(entry);
-                                    } else {
-                                        router.push(`/?search=${encodeURIComponent(name)}`, { scroll: false });
-                                    }
+                                    handleSearch();
                                 }}
                                 className="px-5 py-2.5 bg-[#F3EFEC] hover:bg-[#EBE5E0] text-[#5D4037] text-sm font-medium rounded-full transition-all border border-[#E9E4DE] hover:border-[#D7CCC8] hover:shadow-sm whitespace-nowrap"
                             >
