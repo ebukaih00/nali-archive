@@ -186,7 +186,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             try {
                 const { data, error } = await supabase
                     .from('names')
-                    .select('id, name, origin, meaning, phonetic_hint, voice_id')
+                    .select('id, name, origin, meaning, phonetic_hint, voice_id, origin_country')
                     .eq('verification_status', 'verified')
                     .ilike('name', `${query}%`)
                     .limit(8);
