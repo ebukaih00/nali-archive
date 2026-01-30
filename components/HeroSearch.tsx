@@ -186,7 +186,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             try {
                 const { data, error } = await supabase
                     .from('names')
-                    .select('id, name, origin, meaning, phonetic_hint, voice_id, origin_country')
+                    .select('id, name, origin, meaning, phonetic_hint, origin_country')
                     .eq('verification_status', 'verified')
                     .ilike('name', `${query}%`)
                     .limit(8);
@@ -204,29 +204,33 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
     }, [query, result]);
 
 
-    const handleSearch = async (entry?: NameEntry) => {
+    const handleSearch = async (input?: NameEntry | string) => {
         setSearching(true);
         setSuggestions([]);
         setShowFeedbackForm(false);
 
-        if (entry) {
-            setResult(entry);
-            setQuery(entry.name);
-            router.push(`/?search=${encodeURIComponent(entry.name)}`, { scroll: false });
-        } else if (query.trim() !== '') {
-            // Try to find exact match in DB
-            const { data, error } = await supabase
-                .from('names')
-                .select('*')
-                .eq('verification_status', 'verified')
-                .ilike('name', query.trim())
-                .maybeSingle();
+        let target: NameEntry | null = null;
 
-            if (data) {
-                setResult(data);
-                setQuery(data.name);
-                router.push(`/?search=${encodeURIComponent(data.name)}`, { scroll: false });
+        if (input && typeof input === 'object') {
+            target = input;
+        } else {
+            const searchTerm = typeof input === 'string' ? input : query;
+            if (searchTerm.trim() !== '') {
+                // Try to find exact match in DB
+                const { data } = await supabase
+                    .from('names')
+                    .select('*')
+                    .eq('verification_status', 'verified')
+                    .ilike('name', searchTerm.trim())
+                    .maybeSingle();
+                target = data;
             }
+        }
+
+        if (target) {
+            setResult(target);
+            setQuery(target.name);
+            router.push(`/?search=${encodeURIComponent(target.name)}`, { scroll: false });
         }
         setSearching(false);
     };
@@ -380,7 +384,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                 key={name}
                                 onClick={() => {
                                     setQuery(name);
-                                    handleSearch();
+                                    handleSearch(name);
                                 }}
                                 className="px-5 py-2.5 bg-[#F3EFEC] hover:bg-[#EBE5E0] text-[#5D4037] text-sm font-medium rounded-full transition-all border border-[#E9E4DE] hover:border-[#D7CCC8] hover:shadow-sm whitespace-nowrap"
                             >
