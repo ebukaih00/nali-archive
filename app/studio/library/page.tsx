@@ -525,10 +525,10 @@ export default function DashboardPage() {
                                                                 const audio = new Audio(task.audioUrl);
                                                                 audio.play();
                                                             }}
-                                                            className="w-8 h-8 rounded-full bg-[#F8F7F5] text-[#4e3629] flex items-center justify-center hover:bg-[#E9E4DE] transition-colors"
+                                                            className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629]/70 hover:text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE]"
                                                             title="Listen"
                                                         >
-                                                            <Play className="w-3 h-3 ml-0.5" />
+                                                            <Volume2 className="w-4 h-4" />
                                                         </button>
                                                     )}
                                                 </div>
@@ -551,19 +551,6 @@ export default function DashboardPage() {
 
                                                 {task.status === 'pending' || task.status === 'approved' ? (
                                                     <>
-                                                        {task.audioUrl && (
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    const audio = new Audio(task.audioUrl);
-                                                                    audio.play();
-                                                                }}
-                                                                className="p-3 rounded-xl border border-[#E9E4DE] text-[#4e3629]/70 hover:text-[#4e3629] hover:bg-[#F3EFEC] transition-colors"
-                                                                title="Listen to current audio"
-                                                            >
-                                                                <Volume2 className="w-4 h-4" />
-                                                            </button>
-                                                        )}
                                                         <button
                                                             onClick={() => handleIgnore(task.id)}
                                                             className="p-3 rounded-xl border border-red-100 text-red-100/10 text-red-400 hover:text-red-500 hover:bg-red-50 transition-colors"
