@@ -505,7 +505,7 @@ export default function DashboardPage() {
                                                         onClick={() => saveEdit(task.id)}
                                                         className="px-6 py-2 bg-[#4e3629] text-white text-sm font-sans font-medium rounded-lg hover:bg-[#3d2b21] transition-colors shadow-md"
                                                     >
-                                                        Confirm
+                                                        Submit
                                                     </button>
                                                 </div>
                                             </div>
@@ -514,23 +514,21 @@ export default function DashboardPage() {
                                         // --- NORMAL MODE ---
                                         <div className="p-5 flex items-center justify-between gap-4">
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-3">
-                                                    {(task.status === 'approved' || task.status === 'edited') && <CheckCircle2 className="w-6 h-6 text-[#4e3629]" />}
-
-                                                    <h3 className={`text-xl font-serif ${task.status === 'approved' || task.status === 'edited' ? 'text-[#4e3629]' : 'text-[#2C2420]'}`}>
+                                                <div className="flex items-center gap-3 text-[#2C2420]">
+                                                    <h3 className="text-xl font-serif">
                                                         {task.name}
                                                     </h3>
-                                                    {task.isDirectName && !task.audioUrl && (
-                                                        <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-sans font-bold rounded uppercase tracking-wider border border-amber-100">
-                                                            Needs Recording
-                                                        </span>
-                                                    )}
                                                     {task.audioUrl && (
                                                         <button
-                                                            onClick={() => playAudio(task.audioUrl)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const audio = new Audio(task.audioUrl);
+                                                                audio.play();
+                                                            }}
                                                             className="w-8 h-8 rounded-full bg-[#F8F7F5] text-[#4e3629] flex items-center justify-center hover:bg-[#E9E4DE] transition-colors"
+                                                            title="Listen"
                                                         >
-                                                            <Play className="w-4 h-4 ml-0.5" />
+                                                            <Play className="w-3 h-3 ml-0.5" />
                                                         </button>
                                                     )}
                                                 </div>
@@ -538,31 +536,12 @@ export default function DashboardPage() {
 
                                             <div className="flex items-center gap-3">
                                                 {/* Status Indicators & Actions */}
-                                                {task.status === 'approved' && (
+                                                {(task.status === 'approved' || task.status === 'edited' || task.status === 'rejected') && (
                                                     <div className="flex items-center gap-2">
-                                                        <span className="px-3 py-1 bg-[#E9E4DE] text-[#4e3629] text-xs font-bold rounded-full uppercase tracking-wider">
-                                                            Verified
-                                                        </span>
                                                         <button
                                                             onClick={() => handleUndo(task.id)}
                                                             className="flex items-center gap-1.5 px-3 py-1 text-xs font-sans font-bold text-[#4e3629]/60 hover:text-[#4e3629] transition-colors"
-                                                            title="Undo verification"
-                                                        >
-                                                            <RotateCcw className="w-3.5 h-3.5" />
-                                                            Undo
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {task.status === 'edited' && (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="px-3 py-1 bg-[#E9E4DE] text-[#4e3629] text-xs font-bold rounded-full uppercase tracking-wider">
-                                                            Edited
-                                                        </span>
-                                                        <button
-                                                            onClick={() => handleUndo(task.id)}
-                                                            className="flex items-center gap-1.5 px-3 py-1 text-xs font-sans font-bold text-[#4e3629]/60 hover:text-[#4e3629] transition-colors"
-                                                            title="Undo edit"
+                                                            title="Undo"
                                                         >
                                                             <RotateCcw className="w-3.5 h-3.5" />
                                                             Undo
@@ -603,7 +582,7 @@ export default function DashboardPage() {
                                                             onClick={() => handleApprove(task.id)}
                                                             className="px-4 py-2 bg-transparent border border-[#4e3629]/20 text-[#4e3629] rounded-xl hover:bg-[#4e3629]/5 font-sans text-sm font-medium transition-colors flex items-center gap-2"
                                                         >
-                                                            <CheckCircle2 className="w-4 h-4" /> {task.isDirectName ? 'Submit' : 'Approve'}
+                                                            <CheckCircle2 className="w-4 h-4" /> Approve
                                                         </button>
                                                     </>
                                                 ) : null}

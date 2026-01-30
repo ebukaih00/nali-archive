@@ -422,38 +422,59 @@ export async function resetSubmission(taskId: string) {
     const { supabase, user } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
-    const { data: current, error: fetchError } = await supabase
+    // 1. Try to find as audio_submission
+    const { data: current } = await supabase
         .from('audio_submissions')
         .select('verification_count, status, name_id')
         .eq('id', taskId)
         .single();
 
-    if (fetchError) throw fetchError;
+    if (current) {
+        let newCount = current.verification_count;
+        if (current.status === 'approved' && newCount > 0) {
+            newCount = newCount - 1;
+        }
 
-    let newCount = current.verification_count;
-    if (current.status === 'approved' && newCount > 0) {
-        newCount = newCount - 1;
+        const { error } = await supabase
+            .from('audio_submissions')
+            .update({
+                status: 'pending',
+                verification_count: newCount,
+                locked_by: null,
+                locked_at: null
+            })
+            .eq('id', taskId);
+
+        if (error) throw error;
+
+        // Also reset the name status
+        if (current.name_id) {
+            await supabase
+                .from('names')
+                .update({
+                    verification_status: 'unverified',
+                    status: 'pending',
+                    ignored: false
+                })
+                .eq('id', current.name_id);
+        }
+    } else {
+        // 2. Direct name ignore/assignment reset (taskId is name_id)
+        const { error: nameError } = await supabase
+            .from('names')
+            .update({
+                verification_status: 'unverified',
+                status: 'pending',
+                ignored: false
+            })
+            .eq('id', taskId)
+            .ilike('assigned_to', user.email!);
+
+        if (nameError) {
+            console.error("Task not found for reset:", taskId);
+        }
     }
 
-    const { data: nameData, error: nameError } = await supabase
-        .from('names')
-        .select('phonetic_hint')
-        .eq('id', current.name_id)
-        .single();
-
-    if (nameError) throw nameError;
-
-    const { error } = await supabase
-        .from('audio_submissions')
-        .update({
-            status: 'pending',
-            verification_count: newCount,
-            phonetic_hint: nameData.phonetic_hint
-        })
-        .eq('id', taskId)
-        .eq('locked_by', user.id);
-
-    if (error) throw error;
     revalidatePath('/studio/library');
 }
 
