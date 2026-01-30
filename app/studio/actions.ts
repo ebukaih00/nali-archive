@@ -188,7 +188,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
                 origin: d.origin,
                 meaning: d.meaning || "No meaning provided",
                 audioUrl: d.audio_url || '',
-                status: d.audio_url ? 'approved' : 'pending', // If it has audio, mark as potentially pre-approved
+                status: 'pending',
                 phonetic_hint: d.phonetic_hint || '',
                 original_phonetics: d.phonetic_hint || '',
                 isDirectName: true // UI helper
