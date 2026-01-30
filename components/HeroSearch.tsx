@@ -187,7 +187,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                 const { data, error } = await supabase
                     .from('names')
                     .select('id, name, origin, meaning, phonetic_hint, origin_country')
-                    .eq('verification_status', 'verified')
+                    .eq('ignored', false)
                     .ilike('name', `${query}%`)
                     .limit(8);
 
@@ -220,7 +220,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                 const { data } = await supabase
                     .from('names')
                     .select('*')
-                    .eq('verification_status', 'verified')
+                    .eq('ignored', false)
                     .ilike('name', searchTerm.trim())
                     .maybeSingle();
                 target = data;
