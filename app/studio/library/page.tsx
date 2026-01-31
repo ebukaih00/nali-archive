@@ -503,7 +503,11 @@ export default function DashboardPage() {
                                                     <button onClick={cancelEditing} className="px-4 py-2 text-sm font-sans font-medium text-[#4e3629] hover:bg-[#E9E4DE] rounded-lg transition-colors">Cancel</button>
                                                     <button
                                                         onClick={() => saveEdit(task.id)}
-                                                        className="px-6 py-2 bg-[#4e3629] text-white text-sm font-sans font-medium rounded-lg hover:bg-[#3d2b21] transition-colors shadow-md"
+                                                        disabled={
+                                                            isRecording ||
+                                                            (editForm.phonetic === (task.phonetic_hint || '') && !editForm.audioBlob)
+                                                        }
+                                                        className={`px-6 py-2 bg-[#4e3629] text-white text-sm font-sans font-medium rounded-lg hover:bg-[#3d2b21] transition-colors shadow-md disabled:opacity-30 disabled:cursor-not-allowed`}
                                                     >
                                                         Submit
                                                     </button>
