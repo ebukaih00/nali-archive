@@ -441,9 +441,20 @@ export default function DashboardPage() {
                                         // --- EDIT MODE ---
                                         <div className="p-5 flex flex-col gap-4 bg-white">
                                             <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h3 className="text-sm font-sans font-bold text-[#4e3629]/60 uppercase tracking-widest mb-1">Edit Name</h3>
-                                                    <h2 className="text-2xl font-serif text-[#2C2420]">{task.name}</h2>
+                                                <div className="flex items-center gap-3">
+                                                    <div>
+                                                        <h3 className="text-sm font-sans font-bold text-[#4e3629]/60 uppercase tracking-widest mb-1">Edit Name</h3>
+                                                        <div className="flex items-center gap-3">
+                                                            <h2 className="text-2xl font-serif text-[#2C2420]">{task.name}</h2>
+                                                            <button
+                                                                onClick={() => playAudio(task.audioUrl || `/api/pronounce?name_id=${task.id}`)}
+                                                                className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
+                                                                title="Listen to original"
+                                                            >
+                                                                <Play className="w-3 h-3 fill-current ml-0.5" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <button onClick={cancelEditing} className="p-1 hover:bg-[#E9E4DE] rounded-full"><X className="w-4 h-4 text-[#4e3629]" /></button>
                                             </div>
@@ -460,16 +471,6 @@ export default function DashboardPage() {
                                                         placeholder="Enter phonetic spelling..."
                                                         className="w-full p-3 rounded-lg border border-[#E9E4DE] font-serif text-lg text-[#2C2420] focus:ring-2 focus:ring-[#4e3629]/20 outline-none"
                                                     />
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        <span className="text-[10px] font-sans font-bold text-[#4e3629]/50 uppercase tracking-widest">AI Preview:</span>
-                                                        <button
-                                                            onClick={() => playAudio(`/api/pronounce?text=${encodeURIComponent(editForm.phonetic || task.name)}&name_id=${task.id}`)}
-                                                            className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629]/70 hover:text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE]"
-                                                            title="Preview AI Voice"
-                                                        >
-                                                            <Volume2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
                                                 </div>
 
                                                 <div className="flex flex-col items-center gap-2">
@@ -529,20 +530,20 @@ export default function DashboardPage() {
                                         <div className="p-5 flex items-center justify-between gap-4">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 text-[#2C2420]">
-                                                    <h3 className="text-lg sm:text-xl font-serif break-all sm:break-normal leading-tight">
-                                                        {task.name}
-                                                    </h3>
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             const audioUrl = task.audioUrl || `/api/pronounce?name_id=${task.id}`;
                                                             playAudio(audioUrl);
                                                         }}
-                                                        className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629]/70 hover:text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
+                                                        className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
                                                         title="Listen"
                                                     >
-                                                        <Volume2 className="w-4 h-4" />
+                                                        <Play className="w-3 h-3 fill-current ml-0.5" />
                                                     </button>
+                                                    <h3 className="text-lg sm:text-xl font-serif break-all sm:break-normal leading-tight">
+                                                        {task.name}
+                                                    </h3>
                                                 </div>
                                             </div>
 
