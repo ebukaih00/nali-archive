@@ -1,60 +1,69 @@
+-- migration: Automated Batch Completion Notifications & Tracking
 
--- 1. Function to count pending names for a user email
-CREATE OR REPLACE FUNCTION public.get_pending_name_count(user_email TEXT)
-RETURNS INTEGER AS $$
-DECLARE
-    pending_count INTEGER;
-BEGIN
-    SELECT count(*)
-    INTO pending_count
-    FROM public.names
-    WHERE assigned_to = user_email
-    AND (verification_status != 'verified' OR verification_status IS NULL)
-    AND ignored = false;
-    
-    RETURN pending_count;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- 1. Add tracking column to profiles
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS pending_review_count INTEGER DEFAULT 0;
 
--- 2. Trigger function to check completion and notify Edge Function
-CREATE OR REPLACE FUNCTION public.on_name_update_check_batch()
+-- 2. Create the sync function
+CREATE OR REPLACE FUNCTION public.sync_pending_review_count()
 RETURNS TRIGGER AS $$
 DECLARE
-    pending_count INTEGER;
+    target_email TEXT;
 BEGIN
-    -- Only act if assigned_to is set and status was changed to 'verified' or 'ignored'
-    IF (NEW.assigned_to IS NOT NULL) AND 
-       (NEW.verification_status = 'verified' OR NEW.ignored = true) AND
-       (OLD.verification_status != 'verified' OR OLD.ignored != true) 
-    THEN
-        pending_count := public.get_pending_name_count(NEW.assigned_to);
-        
-        IF pending_count = 0 THEN
-            -- In a real Supabase environment, this would be configured as a Webhook in the Dashboard.
-            -- However, to make it portable via SQL, we insert into a dedicated 'completed_batches' table
-            -- or use the 'supabase_functions.hooks' table if available.
-            -- For this project, we'll create a simple 'batch_completions' log table that the Edge Function can watch.
-            INSERT INTO public.batch_completions (contributor_email, completed_at)
-            VALUES (NEW.assigned_to, now());
-        END IF;
+    -- Determine the email to sync
+    IF (TG_OP = 'DELETE') THEN
+        target_email := OLD.assigned_to;
+    ELSE
+        target_email := NEW.assigned_to;
     END IF;
-    RETURN NEW;
+
+    -- Only proceed if there is an assigned email
+    IF target_email IS NOT NULL THEN
+        UPDATE public.profiles
+        SET pending_review_count = (
+            SELECT count(*)::int
+            FROM public.names
+            WHERE assigned_to ILIKE target_email
+            AND status IN ('pending', 'unverified')
+            AND ignored = false
+        )
+        WHERE id IN (
+            SELECT id FROM auth.users WHERE email ILIKE target_email
+        );
+
+        -- NOTE: To actually trigger the email, you must set up a 
+        -- Database Webhook in the Supabase Dashboard:
+        -- 1. Go to Database -> Webhooks
+        -- 2. Create a new webhook for 'profiles' table on 'UPDATE'
+        -- 3. Point it to the 'notify-batch-complete' Edge Function
+    END IF;
+
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. Create log table for batch completions (this triggers the actual Webhook)
-CREATE TABLE IF NOT EXISTS public.batch_completions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    contributor_email TEXT NOT NULL,
-    completed_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);
+-- 3. Create the trigger on names table
+DROP TRIGGER IF EXISTS on_name_change_sync_count ON public.names;
+CREATE TRIGGER on_name_change_sync_count
+AFTER INSERT OR UPDATE OR DELETE ON public.names
+FOR EACH ROW EXECUTE FUNCTION public.sync_pending_review_count();
 
--- Enable RLS for security, but allow the trigger to insert
-ALTER TABLE public.batch_completions ENABLE ROW LEVEL SECURITY;
-
--- 4. Create the trigger on names table
-DROP TRIGGER IF EXISTS tr_check_batch_completion ON public.names;
-CREATE TRIGGER tr_check_batch_completion
-    AFTER UPDATE ON public.names
-    FOR EACH ROW
-    EXECUTE FUNCTION public.on_name_update_check_batch();
+-- 4. Initial Sync for existing data
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN SELECT DISTINCT assigned_to FROM public.names WHERE assigned_to IS NOT NULL LOOP
+        UPDATE public.profiles
+        SET pending_review_count = (
+            SELECT count(*)::int
+            FROM public.names
+            WHERE assigned_to ILIKE r.assigned_to
+            AND status IN ('pending', 'unverified')
+            AND ignored = false
+        )
+        WHERE id IN (
+            SELECT id FROM auth.users WHERE email ILIKE r.assigned_to
+        );
+    END LOOP;
+END $$;
