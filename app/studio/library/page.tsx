@@ -464,13 +464,22 @@ export default function DashboardPage() {
                                                     <label className="block text-xs font-sans font-bold text-[#4e3629]/40 mb-1.5 uppercase tracking-wider">
                                                         Pronunciation
                                                     </label>
-                                                    <input
-                                                        type="text"
-                                                        value={editForm.phonetic}
-                                                        onChange={(e) => setEditForm(prev => ({ ...prev, phonetic: e.target.value }))}
-                                                        placeholder="Enter phonetic spelling..."
-                                                        className="w-full p-3 rounded-lg border border-[#E9E4DE] font-serif text-lg text-[#2C2420] focus:ring-2 focus:ring-[#4e3629]/20 outline-none"
-                                                    />
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={editForm.phonetic}
+                                                            onChange={(e) => setEditForm(prev => ({ ...prev, phonetic: e.target.value }))}
+                                                            placeholder="Enter phonetic spelling..."
+                                                            className="w-full p-3 pr-10 rounded-lg border border-[#E9E4DE] font-serif text-lg text-[#2C2420] focus:ring-2 focus:ring-[#4e3629]/20 outline-none"
+                                                        />
+                                                        <button
+                                                            onClick={() => playAudio(`/api/pronounce?text=${encodeURIComponent(editForm.phonetic || task.name)}&name_id=${task.id}&bypass_cache=true`)}
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors"
+                                                            title="Hear AI version with this spelling"
+                                                        >
+                                                            <Play className="w-4 h-4 fill-current" />
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <div className="flex flex-col items-center gap-2">
@@ -492,15 +501,15 @@ export default function DashboardPage() {
                                                             {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
                                                         </button>
                                                         {editForm.audioBlob && !isRecording && (
-                                                            <div className="flex items-center gap-2">
+                                                            <div className="flex flex-col items-center gap-1">
                                                                 <button
                                                                     onClick={playRecordedAudio}
-                                                                    className="p-2 bg-[#4e3629] text-white rounded-full hover:bg-[#3d2b21] transition-colors shadow-sm"
-                                                                    title="Play recording"
+                                                                    className="w-12 h-12 bg-[#4e3629] text-white rounded-full hover:bg-[#3d2b21] transition-all shadow-md flex items-center justify-center"
+                                                                    title="Play your recording"
                                                                 >
-                                                                    <Play className="w-3 h-3 ml-0.5" />
+                                                                    <Play className="w-6 h-6 fill-current ml-1" />
                                                                 </button>
-                                                                <div className="text-xs font-sans text-[#4e3629] font-medium px-2 py-1 bg-[#E9E4DE] rounded">Recorded</div>
+                                                                <span className="text-[10px] font-sans font-bold text-[#4e3629] uppercase tracking-tighter">Your Voice</span>
                                                             </div>
                                                         )}
                                                     </div>
