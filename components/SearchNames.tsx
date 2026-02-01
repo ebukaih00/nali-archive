@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, Volume1, Loader2 } from 'lucide-react';
+import { Search, Play, Volume2, Volume1, Loader2, Share2, Check } from 'lucide-react';
 import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
@@ -22,6 +22,7 @@ export default function SearchNames() {
     const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<number | null>(null);
+    const [copiedId, setCopiedId] = useState<number | null>(null);
 
     const normalizeText = (text: string) => {
         return text
@@ -120,105 +121,142 @@ export default function SearchNames() {
             const audio = new Audio(URL.createObjectURL(blob));
             audio.onended = () => setPlayingId(null);
             audio.play();
-        } catch (error) {
-            console.error('Error playing audio:', error);
-            setPlayingId(null);
-        }
-    };
+        };
 
-    return (
-        <div className="w-full max-w-4xl mx-auto space-y-10">
-            <div className="relative w-full max-w-2xl mx-auto">
-                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                    <Search className="w-5 h-5 text-secondary/40" />
-                </div>
-                <input
-                    type="text"
-                    placeholder="Search by name, meaning, or origin..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-14 pr-12 py-5 text-xl bg-white border border-secondary/20 rounded-2xl shadow-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all placeholder:text-secondary/30 text-foreground font-sans"
-                />
-                {loading && (
-                    <div className="absolute right-5 top-1/2 -translate-y-1/2">
-                        <Loader2 className="w-5 h-5 text-primary animate-spin" />
+        const handleShare = async (entry: NameEntry) => {
+            const shareData = {
+                title: `${entry.name} | Nigerian Names`,
+                text: `Discover the meaning and pronunciation of the name "${entry.name}" on Nali.`,
+                url: `${window.location.origin}/?search=${encodeURIComponent(entry.name)}`
+            };
+
+            try {
+                if (navigator.share) {
+                    await navigator.share(shareData);
+                    trackEvent('share_name_explore', { name: entry.name, method: 'native' });
+                } else {
+                    await navigator.clipboard.writeText(shareData.url);
+                    setCopiedId(entry.id);
+                    setTimeout(() => setCopiedId(null), 2000);
+                    trackEvent('share_name_explore', { name: entry.name, method: 'clipboard' });
+                }
+            } catch (err) {
+                console.error('Error sharing:', err);
+            }
+        };
+
+        return (
+            <div className="w-full max-w-4xl mx-auto space-y-10">
+                <div className="relative w-full max-w-2xl mx-auto">
+                    <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                        <Search className="w-5 h-5 text-secondary/40" />
                     </div>
-                )}
-            </div>
-
-            <div className="flex justify-between items-center text-secondary/50 font-light px-2">
-                <span className="text-sm">
-                    {allNames.length > 0 ? (
-                        `Browsing ${allNames.length.toLocaleString()} names`
-                    ) : (
-                        loading ? "Loading database..." : "Database is empty"
+                    <input
+                        type="text"
+                        placeholder="Search by name, meaning, or origin..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-14 pr-12 py-5 text-xl bg-white border border-secondary/20 rounded-2xl shadow-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all placeholder:text-secondary/30 text-foreground font-sans"
+                    />
+                    {loading && (
+                        <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                        </div>
                     )}
-                </span>
-                {searchTerm && (
-                    <span className="text-sm">
-                        Found {results.length} results
-                    </span>
-                )}
-            </div>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-                {displayResults.map((entry) => (
-                    <div
-                        key={entry.id}
-                        className="group bg-white border border-white/50 rounded-3xl p-8 shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-[0_15px_60px_rgba(0,0,0,0.06)] transition-all duration-300 animate-fade-in-up"
-                    >
-                        <div className="flex justify-between items-start mb-6">
-                            <div className="flex-1 pr-4">
-                                <h3 className="text-3xl font-serif text-foreground mb-2 group-hover:text-primary transition-colors">
-                                    {entry.name}
-                                </h3>
-                                <div className="flex items-center gap-2 text-secondary/60">
-                                    {playingId === entry.id ? (
-                                        <Volume2 className="w-4 h-4 text-primary animate-pulse" />
-                                    ) : (
-                                        <Volume1 className="w-4 h-4" />
-                                    )}
-                                    <span className="text-sm font-serif italic">{entry.phonetic_hint || entry.name}</span>
+                <div className="flex justify-between items-center text-secondary/50 font-light px-2">
+                    <span className="text-sm">
+                        {allNames.length > 0 ? (
+                            `Browsing ${allNames.length.toLocaleString()} names`
+                        ) : (
+                            loading ? "Loading database..." : "Database is empty"
+                        )}
+                    </span>
+                    {searchTerm && (
+                        <span className="text-sm">
+                            Found {results.length} results
+                        </span>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                    {displayResults.map((entry) => (
+                        <div
+                            key={entry.id}
+                            className="group bg-white border border-white/50 rounded-3xl p-8 shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-[0_15px_60px_rgba(0,0,0,0.06)] transition-all duration-300 animate-fade-in-up"
+                        >
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="flex-1 pr-4">
+                                    <h3 className="text-3xl font-serif text-foreground mb-2 group-hover:text-primary transition-colors">
+                                        {entry.name}
+                                    </h3>
+                                    <div className="flex items-center gap-2 text-secondary/60">
+                                        {playingId === entry.id ? (
+                                            <Volume2 className="w-4 h-4 text-primary animate-pulse" />
+                                        ) : (
+                                            <Volume1 className="w-4 h-4" />
+                                        )}
+                                        <span className="text-sm font-serif italic">{entry.phonetic_hint || entry.name}</span>
+                                    </div>
                                 </div>
+
+                                <button
+                                    onClick={() => playPronunciation(entry)}
+                                    disabled={playingId !== null}
+                                    className="w-12 h-12 flex items-center justify-center rounded-full bg-background text-primary hover:scale-105 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+                                >
+                                    {playingId === entry.id ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <Play className="w-5 h-5 fill-primary stroke-none ml-0.5" />
+                                    )}
+                                </button>
                             </div>
 
-                            <button
-                                onClick={() => playPronunciation(entry)}
-                                disabled={playingId !== null}
-                                className="w-12 h-12 flex items-center justify-center rounded-full bg-background text-primary hover:scale-105 active:scale-95 transition-all shadow-sm disabled:opacity-50"
-                            >
-                                {playingId === entry.id ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <Play className="w-5 h-5 fill-primary stroke-none ml-0.5" />
-                                )}
-                            </button>
+                            <p className="text-foreground/70 font-light leading-relaxed font-serif mb-6 line-clamp-3">
+                                {entry.meaning || "Meaning coming soon..."}
+                            </p>
+
+                            <div className="flex items-center justify-between mt-auto">
+                                <div className="flex gap-2">
+                                    <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
+                                        {entry.origin}
+                                    </span>
+                                    <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
+                                        {entry.origin_country}
+                                    </span>
+                                </div>
+
+                                <button
+                                    onClick={() => handleShare(entry)}
+                                    className="p-2 text-secondary/40 hover:text-primary transition-colors relative group/share"
+                                    title="Share"
+                                >
+                                    {copiedId === entry.id ? (
+                                        <Check className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                        <Share2 className="w-4 h-4" />
+                                    )}
+                                    {copiedId === entry.id && (
+                                        <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-100 transition-opacity">
+                                            Copied!
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
                         </div>
+                    ))}
 
-                        <p className="text-foreground/70 font-light leading-relaxed font-serif mb-6 line-clamp-3">
-                            {entry.meaning || "Meaning coming soon..."}
-                        </p>
-
-                        <div className="flex gap-2">
-                            <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
-                                {entry.origin}
-                            </span>
-                            <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
-                                {entry.origin_country}
-                            </span>
+                    {displayResults.length === 0 && !loading && (
+                        <div className="col-span-full text-center py-20 text-secondary/30">
+                            <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                            <p className="text-xl font-light">No names match your search</p>
                         </div>
-                    </div>
-                ))}
-
-                {displayResults.length === 0 && !loading && (
-                    <div className="col-span-full text-center py-20 text-secondary/30">
-                        <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                        <p className="text-xl font-light">No names match your search</p>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
-        </div>
-    );
-}
+        );
+    }
 
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
+import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
 import { trackEvent } from '../lib/analytics';
@@ -265,6 +265,29 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
         }
     }, [result]);
 
+    const handleShare = async () => {
+        if (!result) return;
+        const shareData = {
+            title: `${result.name} | Nigerian Names`,
+            text: `Discover the meaning and pronunciation of the name "${result.name}" on Nali.`,
+            url: `${window.location.origin}/?search=${encodeURIComponent(result.name)}`
+        };
+
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+                trackEvent('share_name', { name: result.name, method: 'native' });
+            } else {
+                await navigator.clipboard.writeText(shareData.url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+                trackEvent('share_name', { name: result.name, method: 'clipboard' });
+            }
+        } catch (err) {
+            console.error('Error sharing:', err);
+        }
+    };
+
     const playAudio = async () => {
         if (!result || audioPlaying) return;
         setAudioPlaying(true);
@@ -429,9 +452,18 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                         {/* Main Card Content */}
                         <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 text-left">
                             <div className="flex-1">
-                                <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider mb-4">
-                                    {result.origin}
-                                </span>
+                                <div className="flex items-center justify-between mb-4">
+                                    <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider">
+                                        {result.origin}
+                                    </span>
+                                    <button
+                                        onClick={handleShare}
+                                        className="p-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors rounded-full hover:bg-[#F3EFEC]"
+                                        title="Share name"
+                                    >
+                                        <Share2 className="w-4 h-4" />
+                                    </button>
+                                </div>
                                 <h2 className="text-4xl md:text-5xl font-serif text-[#4e3629] mb-4 leading-tight break-words">
                                     {result.name}
                                 </h2>
