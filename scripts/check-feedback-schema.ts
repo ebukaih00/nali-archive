@@ -34,7 +34,7 @@ async function checkSchema() {
         if (colError) {
             console.error("Error:", colError.message);
         } else {
-            console.log("Existing columns:", data && data.length > 0 ? Object.keys(data[0]) : "No rows found");
+            console.log("Existing columns:", (cols as any[]) && (cols as any[]).length > 0 ? Object.keys((cols as any[])[0]) : "No rows found");
         }
     } else {
         console.log("Table structure:", data);
