@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, Volume1, Loader2, Share2, Check } from 'lucide-react';
+import { Search, Play, Volume2, Volume1, Loader2, Link as LinkIcon, Check } from 'lucide-react';
 import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
@@ -222,31 +222,28 @@ export default function SearchNames() {
                         </p>
 
                         <div className="flex items-center justify-between mt-auto">
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-2">
                                 <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
                                     {entry.origin}
                                 </span>
+                                <button
+                                    onClick={() => handleShare(entry)}
+                                    className="p-1 px-2 text-secondary/40 hover:text-primary transition-colors flex items-center gap-1.5 group/share"
+                                    title="Copy link"
+                                >
+                                    {copiedId === entry.id ? (
+                                        <Check className="w-3.5 h-3.5 text-green-600" />
+                                    ) : (
+                                        <LinkIcon className="w-3.5 h-3.5" />
+                                    )}
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest transition-opacity ${copiedId === entry.id ? 'opacity-100 text-green-600' : 'opacity-0 group-hover/share:opacity-100'}`}>
+                                        {copiedId === entry.id ? 'Copied' : 'Link'}
+                                    </span>
+                                </button>
                                 <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
                                     {entry.origin_country}
                                 </span>
                             </div>
-
-                            <button
-                                onClick={() => handleShare(entry)}
-                                className="p-2 text-secondary/40 hover:text-primary transition-colors relative group/share"
-                                title="Share"
-                            >
-                                {copiedId === entry.id ? (
-                                    <Check className="w-4 h-4 text-green-600" />
-                                ) : (
-                                    <Share2 className="w-4 h-4" />
-                                )}
-                                {copiedId === entry.id && (
-                                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-100 transition-opacity">
-                                        Copied!
-                                    </span>
-                                )}
-                            </button>
                         </div>
                     </div>
                 ))}

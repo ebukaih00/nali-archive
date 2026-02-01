@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Share2 } from 'lucide-react';
+import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Link as LinkIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
 import { trackEvent } from '../lib/analytics';
@@ -452,16 +452,19 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                         {/* Main Card Content */}
                         <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 text-left">
                             <div className="flex-1">
-                                <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2 mb-4">
                                     <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider">
                                         {result.origin}
                                     </span>
                                     <button
                                         onClick={handleShare}
-                                        className="p-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors rounded-full hover:bg-[#F3EFEC]"
-                                        title="Share name"
+                                        className="p-1 px-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors rounded hover:bg-[#F3EFEC] flex items-center gap-1.5 group/share"
+                                        title="Copy link"
                                     >
-                                        <Share2 className="w-4 h-4" />
+                                        <LinkIcon className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover/share:opacity-100 transition-opacity">
+                                            {copied ? 'Copied' : 'Link'}
+                                        </span>
                                     </button>
                                 </div>
                                 <h2 className="text-4xl md:text-5xl font-serif text-[#4e3629] mb-4 leading-tight break-words">
