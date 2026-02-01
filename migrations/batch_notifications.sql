@@ -10,14 +10,12 @@ RETURNS TRIGGER AS $$
 DECLARE
     target_email TEXT;
 BEGIN
-    -- Determine the email to sync
     IF (TG_OP = 'DELETE') THEN
         target_email := OLD.assigned_to;
     ELSE
         target_email := NEW.assigned_to;
     END IF;
 
-    -- Only proceed if there is an assigned email
     IF target_email IS NOT NULL THEN
         UPDATE public.profiles
         SET pending_review_count = (
@@ -30,12 +28,6 @@ BEGIN
         WHERE id IN (
             SELECT id FROM auth.users WHERE email ILIKE target_email
         );
-
-        -- NOTE: To actually trigger the email, you must set up a 
-        -- Database Webhook in the Supabase Dashboard:
-        -- 1. Go to Database -> Webhooks
-        -- 2. Create a new webhook for 'profiles' table on 'UPDATE'
-        -- 3. Point it to the 'notify-batch-complete' Edge Function
     END IF;
 
     RETURN NULL;
@@ -66,4 +58,5 @@ BEGIN
             SELECT id FROM auth.users WHERE email ILIKE r.assigned_to
         );
     END LOOP;
-END $$;
+END;
+$$;
