@@ -262,12 +262,17 @@ export default function DashboardPage() {
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream);
+
+            // Detect best supported mime type (critical for iOS/Mobile Safari support)
+            const mimeTypes = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/wav'];
+            const supportedType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+
+            const recorder = new MediaRecorder(stream, supportedType ? { mimeType: supportedType } : {});
             const chunks: BlobPart[] = [];
 
             recorder.ondataavailable = (e) => chunks.push(e.data);
             recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
                 setEditForm(prev => ({ ...prev, audioBlob: blob }));
                 stream.getTracks().forEach(track => track.stop());
             };
