@@ -580,9 +580,11 @@ export default function DashboardPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => handleApprove(task.id)}
-                                                            className="px-4 py-2 bg-transparent border border-[#4e3629]/20 text-[#4e3629] rounded-xl hover:bg-[#4e3629]/5 font-sans text-sm font-medium transition-colors flex items-center gap-2"
+                                                            className="p-3 sm:px-4 sm:py-2 bg-transparent border border-[#4e3629]/20 text-[#4e3629] rounded-xl hover:bg-[#4e3629]/5 font-sans text-sm font-medium transition-colors flex items-center gap-2"
+                                                            title="Approve"
                                                         >
-                                                            <CheckCircle2 className="w-4 h-4" /> Approve
+                                                            <CheckCircle2 className="w-4 h-4" />
+                                                            <span className="hidden sm:inline">Approve</span>
                                                         </button>
                                                     </>
                                                 ) : null}
