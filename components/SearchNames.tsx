@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, Volume1, Loader2 } from 'lucide-react';
+import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
     id: number;
@@ -58,6 +59,8 @@ export default function SearchNames() {
                     }
                 }
                 setAllNames(allData);
+                // Track initial load of names
+                trackEvent('names_loaded', { count: allData.length });
             } catch (error) {
                 console.error('Error fetching names:', error);
             } finally {
@@ -72,6 +75,11 @@ export default function SearchNames() {
         if (!searchTerm) return allNames.slice(0, 50);
 
         const normalizedSearch = normalizeText(searchTerm);
+
+        // Track search action
+        if (searchTerm.trim()) {
+            trackEvent('search_explore', { search_term: searchTerm.trim() });
+        }
 
         return allNames.filter(entry => {
             const normalizedName = normalizeText(entry.name);
@@ -100,6 +108,13 @@ export default function SearchNames() {
             });
 
             if (!response.ok) throw new Error('Failed to fetch audio');
+
+            // Track audio play
+            trackEvent('play_name_explore', {
+                name: entry.name,
+                name_id: entry.id,
+                origin: entry.origin
+            });
 
             const blob = await response.blob();
             const audio = new Audio(URL.createObjectURL(blob));

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
+import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
     id: number;
@@ -231,6 +232,18 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             setResult(target);
             setQuery(target.name);
             router.push(`/?search=${encodeURIComponent(target.name)}`, { scroll: false });
+
+            // Track successful search
+            trackEvent('search', {
+                search_term: target.name,
+                origin: target.origin
+            });
+        } else {
+            // Track search with no direct match (could be useful for identifying missing names)
+            const term = typeof input === 'string' ? input : query;
+            if (term.trim()) {
+                trackEvent('search_no_match', { search_term: term.trim() });
+            }
         }
         setSearching(false);
     };
@@ -273,6 +286,14 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                     name_id: result.id
                 })
             });
+
+            // Track audio play
+            trackEvent('play_name', {
+                name: result.name,
+                name_id: result.id,
+                origin: result.origin
+            });
+
             const blob = await res.blob();
             const audio = new Audio(URL.createObjectURL(blob));
             audio.onended = () => setAudioPlaying(false);
