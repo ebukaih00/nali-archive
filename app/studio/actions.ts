@@ -307,12 +307,12 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
         const { error: nameError } = await supabase
             .from('names')
             .update({
-                verification_status: action === 'approved' ? 'verified' : 'pending',
+                verification_status: action === 'approved' ? 'verified' : 'unverified',
                 status: action === 'approved' ? 'verified' : 'pending',
                 ignored: action === 'rejected'
             })
             .eq('id', taskId)
-            .eq('assigned_to', user.email!);
+            .ilike('assigned_to', user.email!);
 
         if (nameError) {
             // If it's not a name either, then we fail
@@ -408,9 +408,9 @@ export async function ignoreName(nameId: string) {
 
     const { error } = await supabase
         .from('names')
-        .update({ ignored: true })
+        .update({ ignored: true, status: 'rejected' })
         .eq('id', nameId)
-        .eq('assigned_to', user.email!);
+        .ilike('assigned_to', user.email!);
 
     if (error) throw error;
 
