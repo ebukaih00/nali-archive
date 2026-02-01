@@ -48,7 +48,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
 
     // General Feedback State
     const [showGeneralFeedbackModal, setShowGeneralFeedbackModal] = useState(false);
-    const [generalFeedback, setGeneralFeedback] = useState({ category: '', comment: '' });
+    const [generalFeedback, setGeneralFeedback] = useState({ category: '', comment: '', userName: '' });
     const [generalFeedbackLoading, setGeneralFeedbackLoading] = useState(false);
     const [isGeneralDropdownOpen, setIsGeneralDropdownOpen] = useState(false);
 
@@ -63,12 +63,13 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             const { error } = await supabase.from('feedback').insert({
                 category: sanitizeInput(generalFeedback.category),
                 comment: sanitizeInput(generalFeedback.comment),
+                user_name: generalFeedback.userName ? sanitizeInput(generalFeedback.userName) : null,
                 name_id: null
             });
 
             if (error) throw error;
 
-            setGeneralFeedback({ category: '', comment: '' });
+            setGeneralFeedback({ category: '', comment: '', userName: '' });
             setShowGeneralFeedbackModal(false);
         } catch (error) {
             console.error('Error submitting feedback:', error);
@@ -894,6 +895,25 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                             </AnimatePresence>
                                         </div>
                                     </div>
+
+                                    {generalFeedback.category === 'General Comment' && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            className="overflow-hidden"
+                                        >
+                                            <label className="block text-sm font-medium text-foreground mb-2 text-left">
+                                                Your Name <span className="text-secondary/40 font-normal">(Optional)</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={generalFeedback.userName}
+                                                onChange={(e) => setGeneralFeedback({ ...generalFeedback, userName: e.target.value })}
+                                                className="w-full p-4 bg-background border border-primary/20 rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-secondary/40 font-sans text-sm"
+                                                placeholder="e.g. Ebuka"
+                                            />
+                                        </motion.div>
+                                    )}
 
                                     <div>
                                         <label className="block text-sm font-medium text-foreground mb-2 text-left">Comments</label>
