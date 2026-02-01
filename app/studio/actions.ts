@@ -14,7 +14,8 @@ export interface BatchCard {
 }
 
 export interface Task {
-    id: string; // audio_submission id
+    id: string; // audio_submission id or name id
+    name_id: string; // The underlying name ID
     name: string;
     origin: string;
     meaning: string;
@@ -184,6 +185,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
         if (assigned && assigned.length > 0) {
             const tasks: Task[] = assigned.map(d => ({
                 id: d.id, // Using name_id as taskId for assigned names
+                name_id: d.id,
                 name: d.name,
                 origin: d.origin,
                 meaning: d.meaning || "No meaning provided",
@@ -254,6 +256,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
 
     const tasks: Task[] = tasksData.map((d: any) => ({
         id: d.id,
+        name_id: d.names.id,
         name: d.names.name,
         origin: d.names.origin,
         meaning: d.names.meaning || "No meaning provided",

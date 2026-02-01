@@ -447,7 +447,7 @@ export default function DashboardPage() {
                                                         <div className="flex items-center gap-3">
                                                             <h2 className="text-2xl font-serif text-[#2C2420]">{task.name}</h2>
                                                             <button
-                                                                onClick={() => playAudio(task.audioUrl || `/api/pronounce?name_id=${task.id}`)}
+                                                                onClick={() => playAudio(task.audioUrl || `/api/pronounce?name_id=${task.name_id}`)}
                                                                 className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
                                                                 title="Listen to original"
                                                             >
@@ -473,7 +473,7 @@ export default function DashboardPage() {
                                                             className="w-full p-3 pr-10 rounded-lg border border-[#E9E4DE] font-serif text-lg text-[#2C2420] focus:ring-2 focus:ring-[#4e3629]/20 outline-none"
                                                         />
                                                         <button
-                                                            onClick={() => playAudio(`/api/pronounce?text=${encodeURIComponent(editForm.phonetic || task.name)}&name_id=${task.id}&bypass_cache=true`)}
+                                                            onClick={() => playAudio(`/api/pronounce?text=${encodeURIComponent(editForm.phonetic || task.name)}&name_id=${task.name_id}&bypass_cache=true`)}
                                                             className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors"
                                                             title="Hear AI version with this spelling"
                                                         >
@@ -542,7 +542,7 @@ export default function DashboardPage() {
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            const audioUrl = task.audioUrl || `/api/pronounce?name_id=${task.id}`;
+                                                            const audioUrl = task.audioUrl || `/api/pronounce?name_id=${task.name_id}`;
                                                             playAudio(audioUrl);
                                                         }}
                                                         className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
