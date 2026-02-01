@@ -129,7 +129,7 @@ export default function SearchNames() {
     const handleShare = async (entry: NameEntry) => {
         const shareData = {
             title: `${entry.name} | Nigerian Names`,
-            text: `Discover the meaning and pronunciation of the name "${entry.name}" on Nali.`,
+            text: `Hello! Learn the pronunciation of the name "${entry.name}" on Nali.`,
             url: `${window.location.origin}/?search=${encodeURIComponent(entry.name)}`
         };
 

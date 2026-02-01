@@ -269,7 +269,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
         if (!result) return;
         const shareData = {
             title: `${result.name} | Nigerian Names`,
-            text: `Discover the meaning and pronunciation of the name "${result.name}" on Nali.`,
+            text: `Hello! Learn the pronunciation of the name "${result.name}" on Nali.`,
             url: `${window.location.origin}/?search=${encodeURIComponent(result.name)}`
         };
 
