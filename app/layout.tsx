@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Serif, League_Spartan, Dancing_Script } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/react";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
+import { Suspense } from "react";
 
 const ibmSans = IBM_Plex_Sans({
   variable: "--font-sans",
@@ -43,6 +45,9 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${ibmSans.variable} ${ibmSerif.variable} ${leagueSpartan.variable} ${dancingScript.variable} antialiased bg-[#F7F5F3]`}
       >
+        <Suspense fallback={null}>
+          <GoogleAnalytics />
+        </Suspense>
         {children}
         <Analytics />
       </body>
