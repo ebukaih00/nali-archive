@@ -464,22 +464,13 @@ export default function DashboardPage() {
                                                     <label className="block text-xs font-sans font-bold text-[#4e3629]/40 mb-1.5 uppercase tracking-wider">
                                                         Pronunciation
                                                     </label>
-                                                    <div className="relative">
-                                                        <input
-                                                            type="text"
-                                                            value={editForm.phonetic}
-                                                            onChange={(e) => setEditForm(prev => ({ ...prev, phonetic: e.target.value }))}
-                                                            placeholder="Enter phonetic spelling..."
-                                                            className="w-full p-3 pr-10 rounded-lg border border-[#E9E4DE] font-serif text-lg text-[#2C2420] focus:ring-2 focus:ring-[#4e3629]/20 outline-none"
-                                                        />
-                                                        <button
-                                                            onClick={() => playAudio(`/api/pronounce?text=${encodeURIComponent(editForm.phonetic || task.name)}&name_id=${task.name_id}&bypass_cache=true`)}
-                                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors"
-                                                            title="Hear AI version with this spelling"
-                                                        >
-                                                            <Play className="w-4 h-4 fill-current" />
-                                                        </button>
-                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={editForm.phonetic}
+                                                        onChange={(e) => setEditForm(prev => ({ ...prev, phonetic: e.target.value }))}
+                                                        placeholder="Enter phonetic spelling..."
+                                                        className="w-full p-3 rounded-lg border border-[#E9E4DE] font-serif text-lg text-[#2C2420] focus:ring-2 focus:ring-[#4e3629]/20 outline-none"
+                                                    />
                                                 </div>
 
                                                 <div className="flex flex-col items-center gap-2">
