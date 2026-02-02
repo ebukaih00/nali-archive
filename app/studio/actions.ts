@@ -30,6 +30,7 @@ export interface Task {
  * Shared Auth Helper: Handles real users and Demo Mode bypass
  */
 async function getAuth() {
+    const { supabaseAdmin } = await import('@/lib/supabase');
     const supabase = await createClient();
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const cookieStore = await cookies();
@@ -68,7 +69,10 @@ async function getAuth() {
 
     const isAdmin = isDemoMode || profile?.role === 'admin';
 
-    return { supabase, user, isAdmin, languages };
+    // IMPORTANT: If admin or demo mode, use supabaseAdmin to bypass RLS for administrative actions
+    const effectiveSupabase = isAdmin ? supabaseAdmin : supabase;
+
+    return { supabase: effectiveSupabase, user, isAdmin, languages };
 }
 
 export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> {
@@ -273,13 +277,13 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
 }
 
 export async function submitReview(taskId: string, action: 'approved' | 'rejected') {
-    const { supabase, user } = await getAuth();
+    const { supabase, user, isAdmin } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
     // Attempt to find as audio_submission first
     const { data: submission } = await supabase
         .from('audio_submissions')
-        .select('id, verification_count, name_id')
+        .select('id, name_id, verification_count, audio_url, phonetic_hint')
         .eq('id', taskId)
         .single();
 
@@ -296,23 +300,50 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
 
         if (error) throw error;
 
-        if (action === 'approved' && submission.name_id) {
-            await supabase
+        // CRITICAL SYNC: Move the approved data to the names table
+        if (submission.name_id) {
+            const nameUpdates: any = {
+                verification_status: action === 'approved' ? 'verified' : 'unverified',
+                status: action === 'approved' ? 'verified' : (action === 'rejected' ? 'rejected' : 'pending'),
+                ignored: action === 'rejected'
+            };
+
+            // If we approved it, propagate the submission's audio and phonetic data to the names table
+            if (action === 'approved') {
+                if (submission.phonetic_hint) nameUpdates.phonetic_hint = submission.phonetic_hint;
+
+                // If the submission has a human recording, use it. 
+                // Otherwise clear names.audio_url so TTS regenerates with the (potentially new) phonetic hint.
+                if (submission.audio_url) {
+                    nameUpdates.audio_url = submission.audio_url;
+                } else {
+                    nameUpdates.audio_url = null;
+                }
+            }
+
+            const { error: nameError } = await supabase
                 .from('names')
-                .update({ verification_status: 'verified' })
+                .update(nameUpdates)
                 .eq('id', submission.name_id);
+
+            if (nameError) console.error("Error syncing to names table:", nameError);
         }
     } else {
-        // Direct name assignment (taskId is name_id)
-        const { error: nameError } = await supabase
+        let query = supabase
             .from('names')
             .update({
                 verification_status: action === 'approved' ? 'verified' : 'unverified',
                 status: action === 'approved' ? 'verified' : 'pending',
                 ignored: action === 'rejected'
             })
-            .eq('id', taskId)
-            .ilike('assigned_to', user.email!);
+            .eq('id', taskId);
+
+        // Only restrict by assigned_to if NOT an admin/demo
+        if (!isAdmin) {
+            query = query.ilike('assigned_to', user.email!);
+        }
+
+        const { error: nameError } = await query;
 
         if (nameError) {
             // If it's not a name either, then we fail
@@ -324,7 +355,7 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
 }
 
 export async function updateSubmission(taskId: string, formData: FormData) {
-    const { supabase, user } = await getAuth();
+    const { supabase, user, isAdmin } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
     const phonetic = formData.get('phonetic') as string;
@@ -396,6 +427,23 @@ export async function updateSubmission(taskId: string, formData: FormData) {
             .eq('locked_by', user.id);
 
         if (error) throw error;
+
+        // SYNC: Update the names table so the search result instantly reflects changes (phonetic hint/audio)
+        const subForName = await supabase.from('audio_submissions').select('name_id').eq('id', taskId).single();
+        const nameId = (subForName.data as any)?.name_id;
+
+        if (nameId) {
+            const nameUpdates: any = {};
+            if (phonetic) nameUpdates.phonetic_hint = phonetic;
+
+            if (audioUrl) {
+                nameUpdates.audio_url = audioUrl;
+            } else if (phonetic) {
+                nameUpdates.audio_url = null; // Clear to force TTS regen
+            }
+
+            await supabase.from('names').update(nameUpdates).eq('id', nameId);
+        }
     }
 
     revalidatePath('/studio/library');
@@ -408,21 +456,35 @@ export async function ignoreName(nameId: string) {
 
     const { error } = await supabase
         .from('names')
-        .update({ ignored: true, status: 'rejected' })
+        .update({
+            ignored: true,
+            status: 'rejected',
+            verification_status: 'unverified'
+        })
         .eq('id', nameId)
         .ilike('assigned_to', user.email!);
 
-    if (error) throw error;
+    if (error) {
+        // Fallback for audio_submission taskId
+        await supabase
+            .from('audio_submissions')
+            .update({ status: 'rejected' })
+            .eq('id', nameId)
+            .eq('locked_by', user.id);
 
-    // Also clear lock if it was an audio_submission
-    await supabase.from('audio_submissions').update({ status: 'rejected' }).eq('id', nameId).eq('locked_by', user.id);
+        // If it was a submission, also update its name
+        const { data: sub } = await supabase.from('audio_submissions').select('name_id').eq('id', nameId).single();
+        if (sub?.name_id) {
+            await supabase.from('names').update({ ignored: true, status: 'rejected' }).eq('id', sub.name_id);
+        }
+    }
 
     revalidatePath('/studio/library');
     return { success: true };
 }
 
 export async function resetSubmission(taskId: string) {
-    const { supabase, user } = await getAuth();
+    const { supabase, user, isAdmin } = await getAuth();
     if (!user) throw new Error("Unauthorized");
 
     // 1. Try to find as audio_submission
@@ -450,28 +512,35 @@ export async function resetSubmission(taskId: string) {
 
         if (error) throw error;
 
-        // Also reset the name status
+        // ALSO RESET THE NAME TABLE ENTRY
         if (current.name_id) {
             await supabase
                 .from('names')
                 .update({
                     verification_status: 'unverified',
                     status: 'pending',
-                    ignored: false
+                    ignored: false,
+                    audio_url: null // Reset cached audio so TTS regenerates
                 })
                 .eq('id', current.name_id);
         }
     } else {
         // 2. Direct name ignore/assignment reset (taskId is name_id)
-        const { error: nameError } = await supabase
+        let query = supabase
             .from('names')
             .update({
                 verification_status: 'unverified',
                 status: 'pending',
-                ignored: false
+                ignored: false,
+                audio_url: null
             })
-            .eq('id', taskId)
-            .ilike('assigned_to', user.email!);
+            .eq('id', taskId);
+
+        if (!isAdmin) {
+            query = query.ilike('assigned_to', user.email!);
+        }
+
+        const { error: nameError } = await query;
 
         if (nameError) {
             console.error("Task not found for reset:", taskId);

@@ -114,7 +114,7 @@ export default function DashboardPage() {
                 delete newTimers[id];
                 return newTimers;
             });
-        }, 5000);
+        }, 1000);
 
         setVanishingTimers(prev => ({ ...prev, [id]: timer }));
     };
