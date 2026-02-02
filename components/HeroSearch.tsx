@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
+import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
     id: number;
@@ -231,6 +232,12 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             setResult(target);
             setQuery(target.name);
             router.push(`/?search=${encodeURIComponent(target.name)}`, { scroll: false });
+
+            // Track search success
+            trackEvent('search', {
+                search_term: target.name,
+                origin: target.origin
+            });
         }
         setSearching(false);
     };
@@ -277,6 +284,13 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             const audio = new Audio(URL.createObjectURL(blob));
             audio.onended = () => setAudioPlaying(false);
             audio.play();
+
+            // Track audio play
+            trackEvent('play_audio', {
+                name: result.name,
+                origin: result.origin,
+                location: 'hero'
+            });
         } catch (e) {
             console.error(e);
             setAudioPlaying(false);

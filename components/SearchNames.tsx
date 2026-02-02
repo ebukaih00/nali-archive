@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { Search, Play, Volume2, Volume1, Loader2 } from 'lucide-react';
+import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
     id: number;
@@ -83,6 +84,16 @@ export default function SearchNames() {
         });
     }, [searchTerm, allNames]);
 
+    // Track search in explore
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            if (searchTerm.trim().length >= 2) {
+                trackEvent('search_explore', { search_term: searchTerm.trim() });
+            }
+        }, 1500); // 1.5s debounce for search tracking
+        return () => clearTimeout(handler);
+    }, [searchTerm]);
+
     const displayResults = results.slice(0, 50);
 
     const playPronunciation = async (entry: NameEntry) => {
@@ -105,6 +116,13 @@ export default function SearchNames() {
             const audio = new Audio(URL.createObjectURL(blob));
             audio.onended = () => setPlayingId(null);
             audio.play();
+
+            // Track audio play
+            trackEvent('play_audio', {
+                name: entry.name,
+                origin: entry.origin,
+                location: 'explore'
+            });
         } catch (error) {
             console.error('Error playing audio:', error);
             setPlayingId(null);
