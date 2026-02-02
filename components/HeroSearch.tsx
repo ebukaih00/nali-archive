@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Link as LinkIcon } from 'lucide-react';
+import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
 import { trackEvent } from '../lib/analytics';
@@ -17,7 +17,6 @@ interface NameEntry {
     phonetic_hint: string;
     origin: string; // Renamed from language
     voice_id?: string;
-    audio_url?: string;
 }
 
 export default function HeroSearch({ popularNames = [] }: { popularNames?: string[] }) {
@@ -32,6 +31,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
     const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [shareCopied, setShareCopied] = useState(false);
     const [liked, setLiked] = useState(false);
 
     const [showAddModal, setShowAddModal] = useState(false);
@@ -49,7 +49,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
 
     // General Feedback State
     const [showGeneralFeedbackModal, setShowGeneralFeedbackModal] = useState(false);
-    const [generalFeedback, setGeneralFeedback] = useState({ category: '', comment: '', userName: '' });
+    const [generalFeedback, setGeneralFeedback] = useState({ category: '', comment: '' });
     const [generalFeedbackLoading, setGeneralFeedbackLoading] = useState(false);
     const [isGeneralDropdownOpen, setIsGeneralDropdownOpen] = useState(false);
 
@@ -64,13 +64,12 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             const { error } = await supabase.from('feedback').insert({
                 category: sanitizeInput(generalFeedback.category),
                 comment: sanitizeInput(generalFeedback.comment),
-                user_name: generalFeedback.userName ? sanitizeInput(generalFeedback.userName) : null,
                 name_id: null
             });
 
             if (error) throw error;
 
-            setGeneralFeedback({ category: '', comment: '', userName: '' });
+            setGeneralFeedback({ category: '', comment: '' });
             setShowGeneralFeedbackModal(false);
         } catch (error) {
             console.error('Error submitting feedback:', error);
@@ -189,7 +188,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             try {
                 const { data, error } = await supabase
                     .from('names')
-                    .select('id, name, origin, meaning, phonetic_hint, origin_country, audio_url')
+                    .select('id, name, origin, meaning, phonetic_hint, origin_country')
                     .eq('ignored', false)
                     .ilike('name', `${query}%`)
                     .limit(8);
@@ -250,6 +249,30 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
         setSearching(false);
     };
 
+    const handleShare = async () => {
+        if (!result) return;
+        const shareUrl = `${window.location.origin}/?search=${encodeURIComponent(result.name)}`;
+        const shareData = {
+            title: `How to pronounce ${result.name}`,
+            text: `Check out the meaning and pronunciation of the name ${result.name} on Nali.`,
+            url: shareUrl
+        };
+
+        try {
+            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+                trackEvent('share_name', { name: result.name, method: 'native' });
+            } else {
+                await navigator.clipboard.writeText(shareUrl);
+                setShareCopied(true);
+                setTimeout(() => setShareCopied(false), 2000);
+                trackEvent('share_name', { name: result.name, method: 'clipboard' });
+            }
+        } catch (err) {
+            console.error('Error sharing:', err);
+        }
+    };
+
     // Auto-search if query is pre-filled from URL
     useEffect(() => {
         if (query && !result) {
@@ -267,29 +290,6 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
         }
     }, [result]);
 
-    const handleShare = async () => {
-        if (!result) return;
-        const shareData = {
-            title: `${result.name} | Nigerian Names`,
-            text: `Hello! Learn the pronunciation of the name "${result.name}" on Nali.`,
-            url: `${window.location.origin}/?search=${encodeURIComponent(result.name)}`
-        };
-
-        try {
-            if (navigator.share) {
-                await navigator.share(shareData);
-                trackEvent('share_name', { name: result.name, method: 'native' });
-            } else {
-                await navigator.clipboard.writeText(shareData.url);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-                trackEvent('share_name', { name: result.name, method: 'clipboard' });
-            }
-        } catch (err) {
-            console.error('Error sharing:', err);
-        }
-    };
-
     const playAudio = async () => {
         if (!result || audioPlaying) return;
         setAudioPlaying(true);
@@ -301,31 +301,6 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
 
         const targetVoiceId = result.voice_id || VOICE_MAP[result.origin] || 'zwbf3iHXH6YGoTCPStfx';
 
-        // 1. Prioritize Human Recording if available
-        if (result.audio_url) {
-            try {
-                // Add timestamp to bypass potential browser caching of the audio file itself
-                const audioUrl = result.audio_url.includes('?')
-                    ? `${result.audio_url}&t=${Date.now()}`
-                    : `${result.audio_url}?t=${Date.now()}`;
-
-                const audio = new Audio(audioUrl);
-                audio.onended = () => setAudioPlaying(false);
-                audio.play();
-
-                // Track human audio play
-                trackEvent('play_name_human', {
-                    name: result.name,
-                    name_id: result.id,
-                    origin: result.origin
-                });
-                return;
-            } catch (e) {
-                console.error("Failed to play human recording, falling back to AI", e);
-            }
-        }
-
-        // 2. Fallback to AI API
         try {
             const res = await fetch('/api/pronounce', {
                 method: 'POST',
@@ -337,8 +312,8 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                 })
             });
 
-            // Track AI audio play
-            trackEvent('play_name_ai', {
+            // Track audio play
+            trackEvent('play_name', {
                 name: result.name,
                 name_id: result.id,
                 origin: result.origin
@@ -479,21 +454,9 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                         {/* Main Card Content */}
                         <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 text-left">
                             <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider">
-                                        {result.origin}
-                                    </span>
-                                    <button
-                                        onClick={handleShare}
-                                        className="p-1 px-2 text-[#4e3629]/40 hover:text-[#4e3629] transition-colors rounded hover:bg-[#F3EFEC] flex items-center gap-1.5 group/share"
-                                        title="Copy link"
-                                    >
-                                        <LinkIcon className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover/share:opacity-100 transition-opacity">
-                                            {copied ? 'Copied' : 'Link'}
-                                        </span>
-                                    </button>
-                                </div>
+                                <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider mb-4">
+                                    {result.origin}
+                                </span>
                                 <h2 className="text-4xl md:text-5xl font-serif text-[#4e3629] mb-4 leading-tight break-words">
                                     {result.name}
                                 </h2>
@@ -517,6 +480,17 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                                 <Check className="w-4 h-4 text-green-600" />
                                             ) : (
                                                 <Copy className="w-4 h-4" />
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={handleShare}
+                                            className="ml-2 text-[#4e3629] hover:text-[#4e3629] transition-colors"
+                                            title="Share name"
+                                        >
+                                            {shareCopied ? (
+                                                <Check className="w-4 h-4 text-green-600" />
+                                            ) : (
+                                                <Share2 className="w-4 h-4" />
                                             )}
                                         </button>
                                     </div>
@@ -921,25 +895,6 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                             </AnimatePresence>
                                         </div>
                                     </div>
-
-                                    {generalFeedback.category === 'General Comment' && (
-                                        <motion.div
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: 'auto' }}
-                                            className="overflow-hidden"
-                                        >
-                                            <label className="block text-sm font-medium text-foreground mb-2 text-left">
-                                                Your Name <span className="text-secondary/40 font-normal">(Optional)</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={generalFeedback.userName}
-                                                onChange={(e) => setGeneralFeedback({ ...generalFeedback, userName: e.target.value })}
-                                                className="w-full p-4 bg-background border border-primary/20 rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all placeholder:text-secondary/40 font-sans text-sm"
-                                                placeholder="e.g. Ebuka"
-                                            />
-                                        </motion.div>
-                                    )}
 
                                     <div>
                                         <label className="block text-sm font-medium text-foreground mb-2 text-left">Comments</label>

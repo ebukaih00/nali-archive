@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, Volume1, Loader2, Link as LinkIcon, Check } from 'lucide-react';
+import { Search, Play, Volume2, Volume1, Loader2, Share2, Check } from 'lucide-react';
 import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
@@ -13,8 +13,6 @@ interface NameEntry {
     meaning: string;
     phonetic_hint: string;
     origin: string;
-    audio_url?: string;
-    verification_status?: string;
 }
 
 export default function SearchNames() {
@@ -24,7 +22,7 @@ export default function SearchNames() {
     const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<number | null>(null);
-    const [copiedId, setCopiedId] = useState<number | null>(null);
+    const [sharedId, setSharedId] = useState<number | null>(null);
 
     const normalizeText = (text: string) => {
         return text
@@ -46,6 +44,7 @@ export default function SearchNames() {
                     const { data, error } = await supabase
                         .from('names')
                         .select('*')
+                        .eq('verification_status', 'verified')
                         .eq('verification_status', 'verified')
                         .order('name', { ascending: true })
                         .range(from, from + step);
@@ -99,46 +98,20 @@ export default function SearchNames() {
         if (playingId) return;
         setPlayingId(entry.id);
 
-        // 1. Prioritize Human Recording if available
-        if (entry.audio_url) {
-            try {
-                // Add timestamp to bypass potential browser caching
-                const audioUrl = entry.audio_url.includes('?')
-                    ? `${entry.audio_url}&t=${Date.now()}`
-                    : `${entry.audio_url}?t=${Date.now()}`;
-
-                const audio = new Audio(audioUrl);
-                audio.onended = () => setPlayingId(null);
-                audio.play();
-
-                // Track human audio play
-                trackEvent('play_name_explore_human', {
-                    name: entry.name,
-                    name_id: entry.id,
-                    origin: entry.origin
-                });
-                return;
-            } catch (e) {
-                console.error("Failed to play human recording, falling back to AI", e);
-            }
-        }
-
-        // 2. Fallback to AI API
         try {
             const response = await fetch('/api/pronounce', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     text: entry.phonetic_hint || entry.name,
-                    voice_id: entry.origin === 'Hausa' ? 'zwbf3iHXH6YGoTCPStfx' : 'nw6EIXCsQ89uJMjytYb8',
-                    name_id: entry.id
+                    voice_id: entry.origin === 'Hausa' ? 'zwbf3iHXH6YGoTCPStfx' : 'nw6EIXCsQ89uJMjytYb8'
                 }),
             });
 
             if (!response.ok) throw new Error('Failed to fetch audio');
 
-            // Track AI audio play
-            trackEvent('play_name_explore_ai', {
+            // Track audio play
+            trackEvent('play_name_explore', {
                 name: entry.name,
                 name_id: entry.id,
                 origin: entry.origin
@@ -155,20 +128,21 @@ export default function SearchNames() {
     };
 
     const handleShare = async (entry: NameEntry) => {
+        const shareUrl = `${window.location.origin}/?search=${encodeURIComponent(entry.name)}`;
         const shareData = {
-            title: `${entry.name} | Nigerian Names`,
-            text: `Hello! Learn the pronunciation of the name "${entry.name}" on Nali.`,
-            url: `${window.location.origin}/?search=${encodeURIComponent(entry.name)}`
+            title: `How to pronounce ${entry.name}`,
+            text: `Check out the meaning and pronunciation of the name ${entry.name} on Nali.`,
+            url: shareUrl
         };
 
         try {
-            if (navigator.share) {
+            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
                 await navigator.share(shareData);
                 trackEvent('share_name_explore', { name: entry.name, method: 'native' });
             } else {
-                await navigator.clipboard.writeText(shareData.url);
-                setCopiedId(entry.id);
-                setTimeout(() => setCopiedId(null), 2000);
+                await navigator.clipboard.writeText(shareUrl);
+                setSharedId(entry.id);
+                setTimeout(() => setSharedId(null), 2000);
                 trackEvent('share_name_explore', { name: entry.name, method: 'clipboard' });
             }
         } catch (err) {
@@ -249,29 +223,27 @@ export default function SearchNames() {
                             {entry.meaning || "Meaning coming soon..."}
                         </p>
 
-                        <div className="flex items-center justify-between mt-auto">
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between">
+                            <div className="flex gap-2">
                                 <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
                                     {entry.origin}
                                 </span>
-                                <button
-                                    onClick={() => handleShare(entry)}
-                                    className="p-1 px-2 text-secondary/40 hover:text-primary transition-colors flex items-center gap-1.5 group/share"
-                                    title="Copy link"
-                                >
-                                    {copiedId === entry.id ? (
-                                        <Check className="w-3.5 h-3.5 text-green-600" />
-                                    ) : (
-                                        <LinkIcon className="w-3.5 h-3.5" />
-                                    )}
-                                    <span className={`text-[10px] font-bold uppercase tracking-widest transition-opacity ${copiedId === entry.id ? 'opacity-100 text-green-600' : 'opacity-0 group-hover/share:opacity-100'}`}>
-                                        {copiedId === entry.id ? 'Copied' : 'Link'}
-                                    </span>
-                                </button>
                                 <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
                                     {entry.origin_country}
                                 </span>
                             </div>
+
+                            <button
+                                onClick={() => handleShare(entry)}
+                                className="p-2 text-secondary/40 hover:text-primary transition-colors"
+                                title="Share name"
+                            >
+                                {sharedId === entry.id ? (
+                                    <Check className="w-4 h-4 text-green-600" />
+                                ) : (
+                                    <Share2 className="w-4 h-4" />
+                                )}
+                            </button>
                         </div>
                     </div>
                 ))}
@@ -286,3 +258,5 @@ export default function SearchNames() {
         </div>
     );
 }
+
+
