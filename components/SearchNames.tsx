@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, Volume1, Loader2, Share2, Check } from 'lucide-react';
-import { trackEvent } from '../lib/analytics';
+import { Search, Play, Volume2, Volume1, Loader2 } from 'lucide-react';
 
 interface NameEntry {
     id: number;
@@ -22,7 +21,6 @@ export default function SearchNames() {
     const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<number | null>(null);
-    const [sharedId, setSharedId] = useState<number | null>(null);
 
     const normalizeText = (text: string) => {
         return text
@@ -60,8 +58,6 @@ export default function SearchNames() {
                     }
                 }
                 setAllNames(allData);
-                // Track initial load of names
-                trackEvent('names_loaded', { count: allData.length });
             } catch (error) {
                 console.error('Error fetching names:', error);
             } finally {
@@ -76,11 +72,6 @@ export default function SearchNames() {
         if (!searchTerm) return allNames.slice(0, 50);
 
         const normalizedSearch = normalizeText(searchTerm);
-
-        // Track search action
-        if (searchTerm.trim()) {
-            trackEvent('search_explore', { search_term: searchTerm.trim() });
-        }
 
         return allNames.filter(entry => {
             const normalizedName = normalizeText(entry.name);
@@ -110,13 +101,6 @@ export default function SearchNames() {
 
             if (!response.ok) throw new Error('Failed to fetch audio');
 
-            // Track audio play
-            trackEvent('play_name_explore', {
-                name: entry.name,
-                name_id: entry.id,
-                origin: entry.origin
-            });
-
             const blob = await response.blob();
             const audio = new Audio(URL.createObjectURL(blob));
             audio.onended = () => setPlayingId(null);
@@ -124,29 +108,6 @@ export default function SearchNames() {
         } catch (error) {
             console.error('Error playing audio:', error);
             setPlayingId(null);
-        }
-    };
-
-    const handleShare = async (entry: NameEntry) => {
-        const shareUrl = `${window.location.origin}/?search=${encodeURIComponent(entry.name)}`;
-        const shareData = {
-            title: `How to pronounce ${entry.name}`,
-            text: `Check out the meaning and pronunciation of the name ${entry.name} on Nali.`,
-            url: shareUrl
-        };
-
-        try {
-            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-                await navigator.share(shareData);
-                trackEvent('share_name_explore', { name: entry.name, method: 'native' });
-            } else {
-                await navigator.clipboard.writeText(shareUrl);
-                setSharedId(entry.id);
-                setTimeout(() => setSharedId(null), 2000);
-                trackEvent('share_name_explore', { name: entry.name, method: 'clipboard' });
-            }
-        } catch (err) {
-            console.error('Error sharing:', err);
         }
     };
 
@@ -223,27 +184,13 @@ export default function SearchNames() {
                             {entry.meaning || "Meaning coming soon..."}
                         </p>
 
-                        <div className="flex items-center justify-between">
-                            <div className="flex gap-2">
-                                <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
-                                    {entry.origin}
-                                </span>
-                                <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
-                                    {entry.origin_country}
-                                </span>
-                            </div>
-
-                            <button
-                                onClick={() => handleShare(entry)}
-                                className="p-2 text-secondary/40 hover:text-primary transition-colors"
-                                title="Share name"
-                            >
-                                {sharedId === entry.id ? (
-                                    <Check className="w-4 h-4 text-green-600" />
-                                ) : (
-                                    <Share2 className="w-4 h-4" />
-                                )}
-                            </button>
+                        <div className="flex gap-2">
+                            <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
+                                {entry.origin}
+                            </span>
+                            <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
+                                {entry.origin_country}
+                            </span>
                         </div>
                     </div>
                 ))}

@@ -4,10 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Share2 } from 'lucide-react';
+import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
-import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
     id: number;
@@ -31,7 +30,6 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
     const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [copied, setCopied] = useState(false);
-    const [shareCopied, setShareCopied] = useState(false);
     const [liked, setLiked] = useState(false);
 
     const [showAddModal, setShowAddModal] = useState(false);
@@ -233,44 +231,8 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             setResult(target);
             setQuery(target.name);
             router.push(`/?search=${encodeURIComponent(target.name)}`, { scroll: false });
-
-            // Track successful search
-            trackEvent('search', {
-                search_term: target.name,
-                origin: target.origin
-            });
-        } else {
-            // Track search with no direct match (could be useful for identifying missing names)
-            const term = typeof input === 'string' ? input : query;
-            if (term.trim()) {
-                trackEvent('search_no_match', { search_term: term.trim() });
-            }
         }
         setSearching(false);
-    };
-
-    const handleShare = async () => {
-        if (!result) return;
-        const shareUrl = `${window.location.origin}/?search=${encodeURIComponent(result.name)}`;
-        const shareData = {
-            title: `How to pronounce ${result.name}`,
-            text: `Check out the meaning and pronunciation of the name ${result.name} on Nali.`,
-            url: shareUrl
-        };
-
-        try {
-            if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-                await navigator.share(shareData);
-                trackEvent('share_name', { name: result.name, method: 'native' });
-            } else {
-                await navigator.clipboard.writeText(shareUrl);
-                setShareCopied(true);
-                setTimeout(() => setShareCopied(false), 2000);
-                trackEvent('share_name', { name: result.name, method: 'clipboard' });
-            }
-        } catch (err) {
-            console.error('Error sharing:', err);
-        }
     };
 
     // Auto-search if query is pre-filled from URL
@@ -311,14 +273,6 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                     name_id: result.id
                 })
             });
-
-            // Track audio play
-            trackEvent('play_name', {
-                name: result.name,
-                name_id: result.id,
-                origin: result.origin
-            });
-
             const blob = await res.blob();
             const audio = new Audio(URL.createObjectURL(blob));
             audio.onended = () => setAudioPlaying(false);
@@ -480,17 +434,6 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                                 <Check className="w-4 h-4 text-green-600" />
                                             ) : (
                                                 <Copy className="w-4 h-4" />
-                                            )}
-                                        </button>
-                                        <button
-                                            onClick={handleShare}
-                                            className="ml-2 text-[#4e3629] hover:text-[#4e3629] transition-colors"
-                                            title="Share name"
-                                        >
-                                            {shareCopied ? (
-                                                <Check className="w-4 h-4 text-green-600" />
-                                            ) : (
-                                                <Share2 className="w-4 h-4" />
                                             )}
                                         </button>
                                     </div>
