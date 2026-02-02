@@ -17,6 +17,7 @@ interface NameEntry {
     phonetic_hint: string;
     origin: string; // Renamed from language
     voice_id?: string;
+    audio_url?: string;
 }
 
 export default function HeroSearch({ popularNames = [] }: { popularNames?: string[] }) {
@@ -188,7 +189,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             try {
                 const { data, error } = await supabase
                     .from('names')
-                    .select('id, name, origin, meaning, phonetic_hint, origin_country')
+                    .select('id, name, origin, meaning, phonetic_hint, origin_country, audio_url')
                     .eq('ignored', false)
                     .ilike('name', `${query}%`)
                     .limit(8);
@@ -300,6 +301,31 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
 
         const targetVoiceId = result.voice_id || VOICE_MAP[result.origin] || 'zwbf3iHXH6YGoTCPStfx';
 
+        // 1. Prioritize Human Recording if available
+        if (result.audio_url) {
+            try {
+                // Add timestamp to bypass potential browser caching of the audio file itself
+                const audioUrl = result.audio_url.includes('?')
+                    ? `${result.audio_url}&t=${Date.now()}`
+                    : `${result.audio_url}?t=${Date.now()}`;
+
+                const audio = new Audio(audioUrl);
+                audio.onended = () => setAudioPlaying(false);
+                audio.play();
+
+                // Track human audio play
+                trackEvent('play_name_human', {
+                    name: result.name,
+                    name_id: result.id,
+                    origin: result.origin
+                });
+                return;
+            } catch (e) {
+                console.error("Failed to play human recording, falling back to AI", e);
+            }
+        }
+
+        // 2. Fallback to AI API
         try {
             const res = await fetch('/api/pronounce', {
                 method: 'POST',
@@ -311,8 +337,8 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                 })
             });
 
-            // Track audio play
-            trackEvent('play_name', {
+            // Track AI audio play
+            trackEvent('play_name_ai', {
                 name: result.name,
                 name_id: result.id,
                 origin: result.origin

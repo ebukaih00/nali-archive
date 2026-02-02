@@ -13,6 +13,8 @@ interface NameEntry {
     meaning: string;
     phonetic_hint: string;
     origin: string;
+    audio_url?: string;
+    verification_status?: string;
 }
 
 export default function SearchNames() {
@@ -97,20 +99,46 @@ export default function SearchNames() {
         if (playingId) return;
         setPlayingId(entry.id);
 
+        // 1. Prioritize Human Recording if available
+        if (entry.audio_url) {
+            try {
+                // Add timestamp to bypass potential browser caching
+                const audioUrl = entry.audio_url.includes('?')
+                    ? `${entry.audio_url}&t=${Date.now()}`
+                    : `${entry.audio_url}?t=${Date.now()}`;
+
+                const audio = new Audio(audioUrl);
+                audio.onended = () => setPlayingId(null);
+                audio.play();
+
+                // Track human audio play
+                trackEvent('play_name_explore_human', {
+                    name: entry.name,
+                    name_id: entry.id,
+                    origin: entry.origin
+                });
+                return;
+            } catch (e) {
+                console.error("Failed to play human recording, falling back to AI", e);
+            }
+        }
+
+        // 2. Fallback to AI API
         try {
             const response = await fetch('/api/pronounce', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     text: entry.phonetic_hint || entry.name,
-                    voice_id: entry.origin === 'Hausa' ? 'zwbf3iHXH6YGoTCPStfx' : 'nw6EIXCsQ89uJMjytYb8'
+                    voice_id: entry.origin === 'Hausa' ? 'zwbf3iHXH6YGoTCPStfx' : 'nw6EIXCsQ89uJMjytYb8',
+                    name_id: entry.id
                 }),
             });
 
             if (!response.ok) throw new Error('Failed to fetch audio');
 
-            // Track audio play
-            trackEvent('play_name_explore', {
+            // Track AI audio play
+            trackEvent('play_name_explore_ai', {
                 name: entry.name,
                 name_id: entry.id,
                 origin: entry.origin

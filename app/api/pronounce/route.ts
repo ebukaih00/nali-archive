@@ -17,19 +17,32 @@ async function handlePronounce(params: {
         // Check DB first for speed
         const { data: nameData } = await supabaseAdmin
             .from('names')
-            .select('audio_url, name')
+            .select('audio_url, name, verification_status')
             .eq('id', name_id)
             .maybeSingle();
 
         if (nameData?.audio_url) {
-            console.log(`Serving cached audio from DB for name_id: ${name_id}`);
-            const cachedRes = await fetch(nameData.audio_url);
-            if (cachedRes.ok) {
-                const arrayBuffer = await cachedRes.arrayBuffer();
-                const contentType = nameData.audio_url.endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
-                return new NextResponse(Buffer.from(arrayBuffer), {
-                    headers: { "Content-Type": contentType },
-                });
+            try {
+                const cachedRes = await fetch(nameData.audio_url);
+                if (cachedRes.ok) {
+                    console.log(`[Pronounce] Serving cached audio for ${nameData.name} from: ${nameData.audio_url}`);
+                    const arrayBuffer = await cachedRes.arrayBuffer();
+
+                    // Robust extension check (ignore query params)
+                    const urlWithoutParams = nameData.audio_url.split('?')[0];
+                    const contentType = urlWithoutParams.toLowerCase().endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
+
+                    return new NextResponse(Buffer.from(arrayBuffer), {
+                        headers: {
+                            "Content-Type": contentType,
+                            "Cache-Control": "public, max-age=31536000, immutable"
+                        },
+                    });
+                } else {
+                    console.warn(`[Pronounce] Cache fetch failed for ${nameData.name}: ${cachedRes.status}`);
+                }
+            } catch (err) {
+                console.error(`[Pronounce] Error fetching cached audio for ${nameData.name}:`, err);
             }
         }
     }
@@ -128,12 +141,18 @@ async function handlePronounce(params: {
 
     // Cache (if not internal bypass/playground)
     if (name_id && !bypass_cache) {
+        // Only update audio_url if it's currently empty OR if the name is not verified
+        // This prevents overwriting human recordings with AI audio.
+        const { data: current } = await supabaseAdmin.from('names').select('verification_status, audio_url').eq('id', name_id).single();
+
         const fileName = `${name_id}.mp3`;
         await supabaseAdmin.storage.from('name-audio')
             .upload(fileName, audioBuffer, { contentType: 'audio/mpeg', upsert: true });
 
         const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(fileName);
-        if (publicUrl) {
+
+        if (publicUrl && (!current?.audio_url || current?.verification_status !== 'verified')) {
+            console.log(`[Pronounce] Updating AI cache URL for name_id: ${name_id}`);
             await supabaseAdmin.from('names').update({ audio_url: publicUrl }).eq('id', name_id);
         }
     }
