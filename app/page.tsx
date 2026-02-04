@@ -10,6 +10,21 @@ export default async function Home(props: { searchParams: Promise<{ [key: string
   const supabase = await createClient();
 
   const isSearchActive = !!searchParams.search || !!searchParams.name;
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Redirect contributors and admins to the Studio automatically
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.role === 'contributor' || profile?.role === 'admin') {
+      const { redirect } = await import('next/navigation');
+      redirect('/studio/library');
+    }
+  }
 
   // Fetch count
   const { count } = await supabase

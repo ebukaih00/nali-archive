@@ -80,7 +80,7 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     const { data: assignedItems } = await supabase
         .from('names')
         .select('id, origin, status')
-        .ilike('assigned_to', user.email!)
+        .ilike('assigned_to', `%${user.email?.trim()}%`)
         .or('status.eq.pending,status.eq.unverified')
         .eq('ignored', false);
 
@@ -97,7 +97,7 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
                 names!inner (id, origin, assigned_to, ignored)
             `)
             .eq('status', 'pending')
-            .is('names.assigned_to', null) // Only show unassigned in open queue
+            .or(`assigned_to.is.null,assigned_to.ilike.%${user.email?.trim()}%`, { foreignTable: 'names' })
             .eq('names.ignored', false)
             .limit(2000);
 
@@ -129,9 +129,9 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
             const lang = item.names?.origin || 'Uncategorized';
 
             // FILTER LOGIC
-            if (!isAdmin) {
+            if (!isAdmin && lang !== 'My Assignments') {
                 if (allowedLanguages.length === 0) return; // Show nothing if no expertise identified
-                const isAllowed = allowedLanguages.some(al => lang.toLowerCase().includes(al));
+                const isAllowed = allowedLanguages.some(al => lang.toLowerCase().includes(al.toLowerCase()));
                 if (!isAllowed) return;
             }
 
@@ -178,7 +178,7 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
         const { data: assigned } = await supabase
             .from('names')
             .select('id, name, origin, meaning, phonetic_hint, audio_url')
-            .ilike('assigned_to', user.email!)
+            .ilike('assigned_to', `%${user.email?.trim()}%`)
             .or('status.eq.pending,status.eq.unverified')
             .eq('ignored', false)
             .limit(50);

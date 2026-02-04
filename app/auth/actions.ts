@@ -14,7 +14,7 @@ export async function validateLoginEmail(email: string): Promise<{ allowed: bool
         const { data: application, error: appError } = await supabaseAdmin
             .from('contributor_applications')
             .select('status')
-            .eq('email', email)
+            .ilike('email', email)
             .eq('status', 'approved')
             .single();
 
@@ -25,7 +25,7 @@ export async function validateLoginEmail(email: string): Promise<{ allowed: bool
         // 2. Check auth.users + profiles for existing admin/contributor role
         // This is for users who might have been added manually without an application
         const { data: { users }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-        const user = users.find(u => u.email === email);
+        const user = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
         if (user) {
             const { data: profile } = await supabaseAdmin
