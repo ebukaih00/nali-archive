@@ -279,7 +279,7 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
     // Attempt to find as audio_submission first
     const { data: submission } = await supabase
         .from('audio_submissions')
-        .select('id, verification_count, name_id')
+        .select('id, verification_count, name_id, audio_url, phonetic_hint')
         .eq('id', taskId)
         .single();
 
@@ -297,9 +297,18 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
         if (error) throw error;
 
         if (action === 'approved' && submission.name_id) {
+            const updates: any = {
+                verification_status: 'verified',
+                status: 'verified' // Sync status as well
+            };
+
+            // Promote the recording or hint from the submission to the name record
+            if (submission.audio_url) updates.audio_url = submission.audio_url;
+            if (submission.phonetic_hint) updates.phonetic_hint = submission.phonetic_hint;
+
             await supabase
                 .from('names')
-                .update({ verification_status: 'verified' })
+                .update(updates)
                 .eq('id', submission.name_id);
         }
     } else {
@@ -321,6 +330,8 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
     }
 
     revalidatePath('/studio/library');
+    revalidatePath('/');
+    revalidatePath('/explore');
 }
 
 export async function updateSubmission(taskId: string, formData: FormData) {
@@ -363,7 +374,14 @@ export async function updateSubmission(taskId: string, formData: FormData) {
             verification_status: 'verified',
             status: 'verified'
         };
-        if (audioUrl) updates.audio_url = audioUrl;
+        if (audioUrl) {
+            updates.audio_url = audioUrl;
+        } else if (phonetic) {
+            // If we are updating the phonetic hint BUT not providing a new recording,
+            // we MUST clear the old audio_url so the AI regenerates with the new hint.
+            updates.audio_url = null;
+        }
+
         if (phonetic) updates.phonetic_hint = phonetic;
 
         const { error: nameError } = await supabase
@@ -399,6 +417,8 @@ export async function updateSubmission(taskId: string, formData: FormData) {
     }
 
     revalidatePath('/studio/library');
+    revalidatePath('/');
+    revalidatePath('/explore');
     return { success: true };
 }
 

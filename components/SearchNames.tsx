@@ -106,7 +106,8 @@ export default function SearchNames() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     text: entry.phonetic_hint || entry.name,
-                    voice_id: entry.origin === 'Hausa' ? 'zwbf3iHXH6YGoTCPStfx' : 'nw6EIXCsQ89uJMjytYb8'
+                    voice_id: entry.origin === 'Hausa' ? 'zwbf3iHXH6YGoTCPStfx' : 'nw6EIXCsQ89uJMjytYb8',
+                    name_id: entry.id
                 }),
             });
 

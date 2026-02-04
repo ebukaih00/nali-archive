@@ -158,7 +158,10 @@ async function handlePronounce(params: {
     }
 
     return new NextResponse(audioBuffer, {
-        headers: { "Content-Type": "audio/mpeg" },
+        headers: {
+            "Content-Type": "audio/mpeg",
+            "Cache-Control": "no-store, max-age=0"
+        },
     });
 }
 
