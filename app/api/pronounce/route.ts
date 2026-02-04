@@ -35,7 +35,7 @@ async function handlePronounce(params: {
                 const cachedRes = await fetch(nameData.audio_url);
 
                 if (cachedRes.ok) {
-                    console.log(`[Pronounce] Serving cached audio for ${nameData.name} (Status: ${cachedRes.status}, Type: ${contentType})`);
+                    console.log(`[Pronounce] Serving cached audio for ${nameData.name} (Status: ${cachedRes.status}, Type: ${contentType}, URL: ${nameData.audio_url})`);
                     const arrayBuffer = await cachedRes.arrayBuffer();
 
                     return new NextResponse(Buffer.from(arrayBuffer), {

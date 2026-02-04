@@ -421,6 +421,7 @@ export async function updateSubmission(taskId: string, formData: FormData) {
 
         const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(fileName);
         audioUrl = publicUrl;
+        console.log(`[Upload] Audio upload successful. URL: ${audioUrl}`);
     }
 
     if (isDirectName) {
@@ -431,24 +432,30 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         };
         if (audioUrl) {
             updates.audio_url = audioUrl;
+            updates.verified_audio_url = audioUrl; // Update both just in case
         } else if (phonetic) {
             // If we are updating the phonetic hint BUT not providing a new recording,
             // we MUST clear the old audio_url so the AI regenerates with the new hint.
             updates.audio_url = null;
+            updates.verified_audio_url = null;
         }
 
         if (phonetic) updates.phonetic_hint = phonetic;
+
+        console.log(`[Update] Updating name ${taskId} with:`, updates);
 
         const { error: nameError } = await supabaseAdmin
             .from('names')
             .update(updates)
             .eq('id', taskId);
-        // .ilike('assigned_to', user.email!); // Bypass RLS
 
-        if (nameError) throw nameError;
+        if (nameError) {
+            console.error("[Update] Name update failed:", nameError);
+            throw nameError;
+        }
 
         // Also create a record in audio_submissions for tracking
-        await supabaseAdmin.from('audio_submissions').insert({
+        const { error: subError } = await supabaseAdmin.from('audio_submissions').insert({
             name_id: taskId,
             audio_url: audioUrl,
             status: 'approved',
@@ -456,6 +463,8 @@ export async function updateSubmission(taskId: string, formData: FormData) {
             phonetic_hint: phonetic,
             verification_count: 1
         });
+
+        if (subError) console.error("[Update] Submission insert failed:", subError);
     } else {
         // Standard review update
         const updates: any = { status: 'edited' };
