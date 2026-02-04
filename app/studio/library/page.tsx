@@ -22,6 +22,7 @@ export default function DashboardPage() {
     // 'hiddenIds' are completely removed from view (passed the 5s window).
     const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
     const [vanishingTimers, setVanishingTimers] = useState<Record<string, NodeJS.Timeout>>({});
+    const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
 
     // Edit Mode State
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -140,7 +141,7 @@ export default function DashboardPage() {
             // Continuous Play: Play next pending task after small delay
             const nextTask = tasks.find(t => t.id !== id && t.status === 'pending');
             if (nextTask?.audioUrl) {
-                setTimeout(() => playAudio(nextTask.audioUrl), 500);
+                setTimeout(() => playAudio(nextTask.id, nextTask.audioUrl), 500);
             }
         } catch (error) {
             console.error("Failed to approve", error);
@@ -223,7 +224,7 @@ export default function DashboardPage() {
             // Continuous Play
             const nextTask = tasks.find(t => t.id !== id && t.status === 'pending');
             if (nextTask?.audioUrl) {
-                setTimeout(() => playAudio(nextTask.audioUrl), 500);
+                setTimeout(() => playAudio(nextTask.id, nextTask.audioUrl), 500);
             }
         } catch (error) {
             console.error("Failed to save edit", error);
@@ -302,8 +303,12 @@ export default function DashboardPage() {
     };
 
     // Play Audio
-    const playAudio = (url?: string) => {
+    const playAudio = (taskId: string, url?: string) => {
         if (!url) return;
+
+        // Track that this was heard
+        setPlayedIds(prev => new Set(prev).add(taskId));
+
         // Cache bust to ensure we get re-generated audio after tuning
         const buster = url.includes('?') ? `&v=${Date.now()}` : `?v=${Date.now()}`;
         const audio = new Audio(url + buster);
@@ -452,7 +457,7 @@ export default function DashboardPage() {
                                                         <div className="flex items-center gap-3">
                                                             <h2 className="text-2xl font-serif text-[#2C2420]">{task.name}</h2>
                                                             <button
-                                                                onClick={() => playAudio(task.audioUrl || `/api/pronounce?name_id=${task.name_id}`)}
+                                                                onClick={() => playAudio(task.id, task.audioUrl || `/api/pronounce?name_id=${task.name_id}`)}
                                                                 className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
                                                                 title="Listen to original"
                                                             >
@@ -539,7 +544,7 @@ export default function DashboardPage() {
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             const audioUrl = task.audioUrl || `/api/pronounce?name_id=${task.name_id}`;
-                                                            playAudio(audioUrl);
+                                                            playAudio(task.id, audioUrl);
                                                         }}
                                                         className="p-1.5 rounded-lg bg-[#F8F7F5] text-[#4e3629] hover:bg-[#E9E4DE] transition-colors border border-[#E9E4DE] shrink-0"
                                                         title="Listen"
@@ -585,8 +590,12 @@ export default function DashboardPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => handleApprove(task.id)}
-                                                            className="p-3 sm:px-4 sm:py-2 bg-transparent border border-[#4e3629]/20 text-[#4e3629] rounded-xl hover:bg-[#4e3629]/5 font-sans text-sm font-medium transition-colors flex items-center gap-2"
-                                                            title="Approve"
+                                                            disabled={!playedIds.has(task.id)}
+                                                            className={`p-3 sm:px-4 sm:py-2 bg-transparent border border-[#4e3629]/20 text-[#4e3629] rounded-xl font-sans text-sm font-medium transition-all flex items-center gap-2 ${!playedIds.has(task.id)
+                                                                ? 'opacity-30 cursor-not-allowed grayscale'
+                                                                : 'hover:bg-[#4e3629]/5 active:scale-95'
+                                                                }`}
+                                                            title={playedIds.has(task.id) ? "Approve" : "Listen to name first"}
                                                         >
                                                             <CheckCircle2 className="w-4 h-4" />
                                                             <span className="hidden sm:inline">Approve</span>
