@@ -303,7 +303,13 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
             };
 
             // Promote the recording or hint from the submission to the name record
-            if (submission.audio_url) updates.audio_url = submission.audio_url;
+            if (submission.audio_url) {
+                updates.audio_url = submission.audio_url;
+            } else if (submission.phonetic_hint) {
+                // If hint changed but no audio provided, clear old audio to force AI regeneration
+                updates.audio_url = null;
+            }
+
             if (submission.phonetic_hint) updates.phonetic_hint = submission.phonetic_hint;
 
             await supabase
@@ -414,6 +420,21 @@ export async function updateSubmission(taskId: string, formData: FormData) {
             .eq('locked_by', user.id);
 
         if (error) throw error;
+
+        // NEW: Promote to names table immediately since a trusted contributor edited it
+        const { data: sub } = await supabase.from('audio_submissions').select('name_id').eq('id', taskId).single();
+        if (sub?.name_id) {
+            const nameUpdates: any = { status: 'verified', verification_status: 'verified' };
+            if (audioUrl) {
+                nameUpdates.audio_url = audioUrl;
+            } else if (phonetic) {
+                // Force regeneration for the new phonetic hint
+                nameUpdates.audio_url = null;
+            }
+            if (phonetic) nameUpdates.phonetic_hint = phonetic;
+
+            await supabase.from('names').update(nameUpdates).eq('id', sub.name_id);
+        }
     }
 
     revalidatePath('/studio/library');
