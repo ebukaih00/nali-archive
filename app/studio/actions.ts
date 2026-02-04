@@ -333,10 +333,14 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
 
             if (submission.phonetic_hint) updates.phonetic_hint = submission.phonetic_hint;
 
-            await supabase
+            console.log(`[Review] Promoting submission ${taskId} to name ${submission.name_id}. Updates:`, updates);
+
+            const { error: promoteError } = await supabase
                 .from('names')
                 .update(updates)
                 .eq('id', submission.name_id);
+
+            if (promoteError) console.error("[Review] Promotion failed:", promoteError);
         }
     } else {
         // Direct name assignment (taskId is name_id)
@@ -455,7 +459,9 @@ export async function updateSubmission(taskId: string, formData: FormData) {
             }
             if (phonetic) nameUpdates.phonetic_hint = phonetic;
 
-            await supabase.from('names').update(nameUpdates).eq('id', sub.name_id);
+            console.log(`[Update] Direct promotion for ${taskId} to name ${sub.name_id}. Updates:`, nameUpdates);
+            const { error: directError } = await supabase.from('names').update(nameUpdates).eq('id', sub.name_id);
+            if (directError) console.error("[Update] Direct promotion failed:", directError);
         }
     }
 

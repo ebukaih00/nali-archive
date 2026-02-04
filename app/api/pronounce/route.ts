@@ -23,14 +23,16 @@ async function handlePronounce(params: {
 
         if (nameData?.audio_url) {
             try {
-                const cachedRes = await fetch(nameData.audio_url);
-                if (cachedRes.ok) {
-                    console.log(`[Pronounce] Serving cached audio for ${nameData.name} from: ${nameData.audio_url}`);
-                    const arrayBuffer = await cachedRes.arrayBuffer();
+                // Determine content type based on URL extension BEFORE fetching
+                const urlWithoutParams = nameData.audio_url.split('?')[0];
+                const contentType = urlWithoutParams.toLowerCase().endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
 
-                    // Robust extension check (ignore query params)
-                    const urlWithoutParams = nameData.audio_url.split('?')[0];
-                    const contentType = urlWithoutParams.toLowerCase().endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
+                console.log(`[Pronounce] Attempting to fetch DB cache for ${nameData.name} from: ${nameData.audio_url}`);
+                const cachedRes = await fetch(nameData.audio_url);
+
+                if (cachedRes.ok) {
+                    console.log(`[Pronounce] Serving cached audio for ${nameData.name} (Status: ${cachedRes.status}, Type: ${contentType})`);
+                    const arrayBuffer = await cachedRes.arrayBuffer();
 
                     return new NextResponse(Buffer.from(arrayBuffer), {
                         headers: {
@@ -39,12 +41,17 @@ async function handlePronounce(params: {
                         },
                     });
                 } else {
-                    console.warn(`[Pronounce] Cache fetch failed for ${nameData.name}: ${cachedRes.status}`);
+                    console.warn(`[Pronounce] Cache fetch failed for ${nameData.name}: ${cachedRes.status} ${cachedRes.statusText}`);
                 }
             } catch (err) {
                 console.error(`[Pronounce] Error fetching cached audio for ${nameData.name}:`, err);
             }
+        } else {
+            console.log(`[Pronounce] No audio_url in DB for name_id: ${name_id}`);
         }
+    } else {
+        if (!name_id) console.log("[Pronounce] No name_id provided, skipping DB cache");
+        if (bypass_cache) console.log("[Pronounce] bypass_cache is TRUE, forcing regeneration");
     }
 
     // Determine the text to speak
