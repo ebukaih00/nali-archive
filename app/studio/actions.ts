@@ -84,28 +84,26 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
         .or('status.eq.pending,status.eq.unverified')
         .eq('ignored', false);
 
-    // 3. Fetch all pending audio submissions (Open Queue) - ADMIN ONLY
+    // 3. Fetch all pending audio submissions (Open Queue)
     let data: any[] = [];
-    if (isAdmin) {
-        const { data: openQueue, error } = await supabase
-            .from('audio_submissions')
-            .select(`
-                id, 
-                locked_by, 
-                locked_at, 
-                status,
-                names!inner (id, origin, assigned_to, ignored)
-            `)
-            .eq('status', 'pending')
-            .or(`assigned_to.is.null,assigned_to.ilike.%${user.email?.trim()}%`, { foreignTable: 'names' })
-            .eq('names.ignored', false)
-            .limit(2000);
+    const { data: openQueue, error } = await supabase
+        .from('audio_submissions')
+        .select(`
+            id, 
+            locked_by, 
+            locked_at, 
+            status,
+            names!inner (id, origin, assigned_to, ignored)
+        `)
+        .eq('status', 'pending')
+        .or(`assigned_to.is.null,assigned_to.ilike.%${user.email?.trim()}%`, { foreignTable: 'names' })
+        .eq('names.ignored', false)
+        .limit(2000);
 
-        if (error) {
-            console.error("Error fetching batches:", error);
-        } else {
-            data = openQueue || [];
-        }
+    if (error) {
+        console.error("Error fetching batches:", error);
+    } else {
+        data = openQueue || [];
     }
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).getTime();
