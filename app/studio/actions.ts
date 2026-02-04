@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
+import { supabaseAdmin } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
@@ -302,9 +303,29 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
                 status: 'verified' // Sync status as well
             };
 
-            // Promote the recording or hint from the submission to the name record
+            // Promote the recording...
             if (submission.audio_url) {
-                updates.audio_url = submission.audio_url;
+                // MOVE to name-audio bucket to ensure public access and standardization
+                try {
+                    const oldPath = submission.audio_url.split('vetting_samples/')[1];
+                    if (oldPath) {
+                        const { data: blob } = await supabaseAdmin.storage.from('vetting_samples').download(oldPath);
+                        if (blob) {
+                            const newFilename = `${submission.name_id}_${Date.now()}.webm`; // Assuming webm from recorder
+                            await supabaseAdmin.storage.from('name-audio').upload(newFilename, blob, { contentType: 'audio/webm', upsert: true });
+                            const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(newFilename);
+                            updates.audio_url = publicUrl;
+                        } else {
+                            // Fallback: use existing URL (might fail if private)
+                            updates.audio_url = submission.audio_url;
+                        }
+                    } else {
+                        updates.audio_url = submission.audio_url;
+                    }
+                } catch (e) {
+                    console.error("Error moving audio:", e);
+                    updates.audio_url = submission.audio_url;
+                }
             } else if (submission.phonetic_hint) {
                 // If hint changed but no audio provided, clear old audio to force AI regeneration
                 updates.audio_url = null;
@@ -362,15 +383,16 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         }
 
         const sanitizedName = nameString.replace(/[^a-zA-Z0-9]/g, '_');
-        const path = `contributor-recordings/${sanitizedName}_${taskId}_${Date.now()}.webm`;
+        // Upload directly to name-audio (public) using Admin client to bypass RLS and ensure API accessibility
+        const fileName = `${taskId}_${Date.now()}.webm`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('vetting_samples')
-            .upload(path, audioFile);
+        const { error: uploadError } = await supabaseAdmin.storage
+            .from('name-audio')
+            .upload(fileName, audioFile, { contentType: 'audio/webm', upsert: true });
 
         if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage.from('vetting_samples').getPublicUrl(path);
+        const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(fileName);
         audioUrl = publicUrl;
     }
 
