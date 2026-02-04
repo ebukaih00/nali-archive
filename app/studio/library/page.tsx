@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 // import { useRouter } from 'next/navigation'; // Not currently used
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Ban, Volume2, Info } from 'lucide-react';
+import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Ban, Volume2, Info, Globe2 } from 'lucide-react';
 import { getPendingBatches, claimBatch as claimBatchAction, submitReview, updateSubmission, releaseLocks, resetSubmission, ignoreName, type BatchCard, type Task } from '../actions';
 import confetti from 'canvas-confetti';
 
@@ -639,6 +639,15 @@ export default function DashboardPage() {
                         </p>
                     </div>
 
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href="/"
+                            className="flex items-center gap-2 text-sm font-sans font-medium text-[#4e3629]/60 hover:text-[#4e3629] transition-colors"
+                        >
+                            <Globe2 className="w-4 h-4" />
+                            Public Search
+                        </Link>
+                    </div>
                 </div>
             </header>
 
