@@ -79,12 +79,12 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
     // 2. Fetch Assigned Names First (Highest Priority)
     const { data: assignedItems } = await supabase
         .from('names')
-        .select('id, origin, status')
+        .select('id, name, origin, status')
         .ilike('assigned_to', `%${user.email?.trim()}%`)
         .or('status.eq.pending,status.eq.unverified')
         .eq('ignored', false);
 
-    // 3. Fetch all pending audio submissions (Open Queue)
+    // 3. Fetch Assigned Audio Submissions
     let data: any[] = [];
     let submissionQuery = supabase
         .from('audio_submissions')
@@ -93,24 +93,21 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
             locked_by, 
             locked_at, 
             status,
-            names!inner (id, origin, assigned_to, ignored)
+            names!inner (id, name, origin, assigned_to, ignored)
         `)
         .eq('status', 'pending')
         .eq('names.ignored', false);
 
     if (isAdmin) {
-        // Admins see EVERYTHING (unassigned or assigned to anyone)
+        // Admins see EVERYTHING
+        const { data: openQueue } = await submissionQuery.limit(2000);
+        data = openQueue || [];
     } else {
         // Contributors ONLY see submissions for names specifically assigned to them
-        submissionQuery = submissionQuery.ilike('names.assigned_to', `%${user.email?.trim()}%`);
-    }
-
-    const { data: openQueue, error } = await submissionQuery.limit(2000);
-
-    if (error) {
-        console.error("Error fetching batches:", error);
-    } else {
-        data = openQueue || [];
+        const { data: personalSubmissions } = await submissionQuery
+            .ilike('names.assigned_to', `%${user.email?.trim()}%`)
+            .limit(1000);
+        data = personalSubmissions || [];
     }
 
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).getTime();
@@ -118,24 +115,26 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
 
     // A. Handle Assigned Names as a priority batch
     if (assignedItems && assignedItems.length > 0) {
+        // Put everything assigned directly into "My Assignments"
         groups['My Assignments'] = assignedItems.map(item => ({
             id: item.id,
             names: item,
-            is_direct_name: true // Flag to indicate these are names, not existing submissions
+            is_direct_name: true
         }));
     }
 
-    // B. Handle Open Queue
+    // B. Handle Submissions
     data.forEach((item: any) => {
         const lockedAt = item.locked_at ? new Date(item.locked_at).getTime() : 0;
         const isLockedByOther = item.locked_by && item.locked_by !== user.id && lockedAt > twoHoursAgo;
 
         if (!isLockedByOther) {
-            const lang = item.names?.origin || 'Uncategorized';
+            const isAssignedToMe = item.names?.assigned_to?.toLowerCase().includes(user.email?.toLowerCase().trim());
+            const lang = (isAssignedToMe && !isAdmin) ? 'My Assignments' : (item.names?.origin || 'Uncategorized');
 
-            // FILTER LOGIC
-            if (!isAdmin && lang !== 'My Assignments') {
-                if (allowedLanguages.length === 0) return; // Show nothing if no expertise identified
+            // Expertise Filter (Only for unassigned community names)
+            if (!isAdmin && !isAssignedToMe) {
+                if (allowedLanguages.length === 0) return;
                 const isAllowed = allowedLanguages.some(al => lang.toLowerCase().includes(al.toLowerCase()));
                 if (!isAllowed) return;
             }
@@ -178,9 +177,10 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
 
-    // 1. Check for Assigned Names first
+    // 1. Handle "My Assignments" (Merged bucket of names and submissions)
     if (language === 'My Assignments') {
-        const { data: assigned } = await supabase
+        // A. Fetch Assigned Names (Direct)
+        const { data: assignedNames } = await supabase
             .from('names')
             .select('id, name, origin, meaning, phonetic_hint, audio_url')
             .ilike('assigned_to', `%${user.email?.trim()}%`)
@@ -188,9 +188,23 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
             .eq('ignored', false)
             .limit(50);
 
-        if (assigned && assigned.length > 0) {
-            const tasks: Task[] = assigned.map(d => ({
-                id: d.id, // Using name_id as taskId for assigned names
+        // B. Fetch Assigned Submissions (Audio)
+        const { data: assignedSubmissions } = await supabase
+            .from('audio_submissions')
+            .select(`
+                id, audio_url, status, phonetic_hint,
+                names!inner (id, name, origin, meaning, phonetic_hint)
+            `)
+            .ilike('names.assigned_to', `%${user.email?.trim()}%`)
+            .eq('status', 'pending')
+            .eq('names.ignored', false)
+            .limit(50);
+
+        const tasks: Task[] = [];
+
+        if (assignedNames) {
+            assignedNames.forEach(d => tasks.push({
+                id: d.id,
                 name_id: d.id,
                 name: d.name,
                 origin: d.origin,
@@ -199,8 +213,25 @@ export async function claimBatch(language: string): Promise<{ tasks: Task[], exp
                 status: 'pending',
                 phonetic_hint: d.phonetic_hint || '',
                 original_phonetics: d.phonetic_hint || '',
-                isDirectName: true // UI helper
+                isDirectName: true
             }));
+        }
+
+        if (assignedSubmissions) {
+            assignedSubmissions.forEach((d: any) => tasks.push({
+                id: d.id,
+                name_id: d.names.id,
+                name: d.names.name,
+                origin: d.names.origin,
+                meaning: d.names.meaning || "No meaning provided",
+                audioUrl: d.audio_url,
+                status: d.status,
+                phonetic_hint: d.phonetic_hint || '',
+                original_phonetics: d.names.phonetic_hint || '',
+            }));
+        }
+
+        if (tasks.length > 0) {
             return { tasks, expiry: now.getTime() + (2 * 60 * 60 * 1000) };
         }
     }
