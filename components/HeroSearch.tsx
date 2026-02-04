@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info } from 'lucide-react';
+import { Search, Play, Volume2, ThumbsUp, ThumbsDown, X, Loader2, Plus, Copy, Check, Info, Link as LinkIcon, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tribes } from '../lib/tribes';
 import { trackEvent } from '../lib/analytics';
@@ -31,6 +31,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
     const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [shareCopied, setShareCopied] = useState(false);
     const [liked, setLiked] = useState(false);
 
     const [showAddModal, setShowAddModal] = useState(false);
@@ -74,6 +75,30 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             console.error('Error submitting feedback:', error);
         } finally {
             setGeneralFeedbackLoading(false);
+        }
+    };
+
+    const handleShare = async () => {
+        if (!result) return;
+        const url = `${window.location.origin}/?search=${encodeURIComponent(result.name)}`;
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `How to pronounce ${result.name}`,
+                    text: `Check out the meaning and pronunciation of "${result.name}" on Nali.`,
+                    url: url
+                });
+            } catch (err) {
+                if ((err as Error).name !== 'AbortError') {
+                    console.error('Error sharing:', err);
+                }
+            }
+        } else {
+            // Fallback: Copy to clipboard
+            navigator.clipboard.writeText(url);
+            setShareCopied(true);
+            setTimeout(() => setShareCopied(false), 2000);
         }
     };
 
@@ -422,9 +447,24 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                         {/* Main Card Content */}
                         <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6 text-left">
                             <div className="flex-1">
-                                <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider mb-4">
-                                    {result.origin}
-                                </span>
+                                <div className="flex items-center gap-2 mb-4">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleShare();
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-[#F3EFEC] text-[#5D4037]/70 hover:text-[#5D4037] hover:bg-[#EDE9E4] transition-all border border-[#E9E4DE] shadow-sm active:scale-95 group"
+                                        title="Share name"
+                                    >
+                                        <LinkIcon className="w-3 h-3" />
+                                        <span className="font-sans">
+                                            {shareCopied ? 'Link copied!' : 'Share'}
+                                        </span>
+                                    </button>
+                                    <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider">
+                                        {result.origin}
+                                    </span>
+                                </div>
                                 <h2 className="text-4xl md:text-5xl font-serif text-[#4e3629] mb-4 leading-tight break-words">
                                     {result.name}
                                 </h2>

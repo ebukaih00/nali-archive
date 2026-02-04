@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, Volume1, Loader2 } from 'lucide-react';
+import { Search, Play, Volume2, Volume1, Loader2, Link as LinkIcon } from 'lucide-react';
 import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
@@ -22,6 +22,7 @@ export default function SearchNames() {
     const [allNames, setAllNames] = useState<NameEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<number | null>(null);
+    const [shareCopiedId, setShareCopiedId] = useState<number | null>(null);
 
     const normalizeText = (text: string) => {
         return text
@@ -130,6 +131,28 @@ export default function SearchNames() {
         }
     };
 
+    const handleShare = async (entry: NameEntry) => {
+        const url = `${window.location.origin}/?search=${encodeURIComponent(entry.name)}`;
+
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `How to pronounce ${entry.name}`,
+                    text: `Check out the meaning and pronunciation of "${entry.name}" on Nali.`,
+                    url: url
+                });
+            } catch (err) {
+                if ((err as Error).name !== 'AbortError') {
+                    console.error('Error sharing:', err);
+                }
+            }
+        } else {
+            navigator.clipboard.writeText(url);
+            setShareCopiedId(entry.id);
+            setTimeout(() => setShareCopiedId(null), 2000);
+        }
+    };
+
     return (
         <div className="w-full max-w-4xl mx-auto space-y-10">
             <div className="relative w-full max-w-2xl mx-auto">
@@ -203,7 +226,15 @@ export default function SearchNames() {
                             {entry.meaning || "Meaning coming soon..."}
                         </p>
 
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => handleShare(entry)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5 hover:bg-secondary/5 transition-colors group"
+                                title="Share name"
+                            >
+                                <LinkIcon className="w-2.5 h-2.5" />
+                                <span>{shareCopiedId === entry.id ? 'Copied!' : 'Share'}</span>
+                            </button>
                             <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
                                 {entry.origin}
                             </span>
