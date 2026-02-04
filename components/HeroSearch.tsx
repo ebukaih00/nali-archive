@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -86,7 +86,7 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
             try {
                 await navigator.share({
                     title: `How to pronounce ${result.name}`,
-                    text: `Check out the meaning and pronunciation of "${result.name}" on Nali.`,
+                    text: `Hello, learn the pronounciation of the name ${result.name} on Nali.`,
                     url: url
                 });
             } catch (err) {
@@ -453,13 +453,14 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                                             e.stopPropagation();
                                             handleShare();
                                         }}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-[#F3EFEC] text-[#5D4037]/70 hover:text-[#5D4037] hover:bg-[#EDE9E4] transition-all border border-[#E9E4DE] shadow-sm active:scale-95 group"
-                                        title="Share name"
+                                        className="p-1.5 rounded-lg bg-[#F3EFEC] text-[#5D4037]/70 hover:text-[#5D4037] hover:bg-[#EDE9E4] transition-all border border-[#E9E4DE] active:scale-95 group"
+                                        title={shareCopied ? "Link copied!" : "Share name"}
                                     >
-                                        <LinkIcon className="w-3 h-3" />
-                                        <span className="font-sans">
-                                            {shareCopied ? 'Link copied!' : 'Share'}
-                                        </span>
+                                        {shareCopied ? (
+                                            <Check className="w-3.5 h-3.5 text-green-600" />
+                                        ) : (
+                                            <LinkIcon className="w-3.5 h-3.5" />
+                                        )}
                                     </button>
                                     <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#F3EFEC] text-[#5D4037] uppercase tracking-wider">
                                         {result.origin}

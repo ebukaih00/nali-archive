@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { Search, Play, Volume2, Volume1, Loader2, Link as LinkIcon } from 'lucide-react';
+import { Search, Play, Volume2, Volume1, Loader2, Link as LinkIcon, Check } from 'lucide-react';
 import { trackEvent } from '../lib/analytics';
 
 interface NameEntry {
@@ -138,7 +138,7 @@ export default function SearchNames() {
             try {
                 await navigator.share({
                     title: `How to pronounce ${entry.name}`,
-                    text: `Check out the meaning and pronunciation of "${entry.name}" on Nali.`,
+                    text: `Hello, learn the pronounciation of the name ${entry.name} on Nali.`,
                     url: url
                 });
             } catch (err) {
@@ -229,11 +229,14 @@ export default function SearchNames() {
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => handleShare(entry)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5 hover:bg-secondary/5 transition-colors group"
-                                title="Share name"
+                                className="inline-flex items-center justify-center w-7 h-7 bg-background text-secondary/70 rounded-full border border-secondary/5 hover:bg-secondary/5 transition-colors group"
+                                title={shareCopiedId === entry.id ? "Link copied!" : "Share name"}
                             >
-                                <LinkIcon className="w-2.5 h-2.5" />
-                                <span>{shareCopiedId === entry.id ? 'Copied!' : 'Share'}</span>
+                                {shareCopiedId === entry.id ? (
+                                    <Check className="w-3.5 h-3.5 text-green-600" />
+                                ) : (
+                                    <LinkIcon className="w-3.5 h-3.5" />
+                                )}
                             </button>
                             <span className="px-3 py-1 bg-background text-secondary/70 text-[10px] font-bold uppercase tracking-widest rounded-full border border-secondary/5">
                                 {entry.origin}
