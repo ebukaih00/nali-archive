@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 // import { useRouter } from 'next/navigation'; // Not currently used
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Ban, Volume2 } from 'lucide-react';
+import { Play, CheckCircle2, ChevronLeft, Pencil, List, Mic, Square, RotateCcw, X, Loader2, LogOut, RefreshCcw, PartyPopper, Ban, Volume2, Info } from 'lucide-react';
 import { getPendingBatches, claimBatch as claimBatchAction, submitReview, updateSubmission, releaseLocks, resetSubmission, ignoreName, type BatchCard, type Task } from '../actions';
 import confetti from 'canvas-confetti';
 
@@ -439,7 +439,7 @@ export default function DashboardPage() {
                             Review & Verify
                         </h1>
                         <p className="text-[#4e3629] font-sans text-sm md:text-base">
-                            Listen to names and update the pronunciation as needed. Your changes are saved as you verify or edit them.
+                            Listen to names and update or approve the pronunciation as needed. Your changes are saved as you verify or edit them.
                         </p>
                     </div>
 
