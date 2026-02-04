@@ -311,15 +311,13 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
                     if (oldPath) {
                         const { data: blob } = await supabaseAdmin.storage.from('vetting_samples').download(oldPath);
                         if (blob) {
-                            const mimeType = blob.type || 'audio/webm';
-                            const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : 'webm';
-                            const newFilename = `${submission.name_id}_${Date.now()}.${ext}`;
+                            const newFilename = `${submission.name_id}_${Date.now()}.mp3`;
 
                             const arrayBuffer = await blob.arrayBuffer();
                             const { error: uploadErr } = await supabaseAdmin.storage
                                 .from('name-audio')
                                 .upload(newFilename, Buffer.from(arrayBuffer), {
-                                    contentType: mimeType,
+                                    contentType: 'audio/mpeg',
                                     upsert: true
                                 });
 
@@ -329,6 +327,7 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
                             } else {
                                 const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(newFilename);
                                 updates.audio_url = publicUrl;
+                                updates.verified_audio_url = publicUrl;
                             }
                         } else {
                             // Fallback: use existing URL (might fail if private)
@@ -404,18 +403,17 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         // Convert File to Buffer for reliable upload in Server Actions
         const arrayBuffer = await audioFile.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        const mimeType = audioFile.type || 'audio/webm';
-        const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : 'webm';
 
-        // Upload directly to name-audio (public) using Admin client to bypass RLS and ensure API accessibility
-        const fileName = `${taskId}_${Date.now()}.${ext}`;
+        // The bucket 'name-audio' strictly enforces 'audio/mpeg'.
+        // We upload as .mp3 with 'audio/mpeg' mime type to ensure acceptance by the storage server.
+        const fileName = `${taskId}_${Date.now()}.mp3`;
 
         const { error: uploadError } = await supabaseAdmin.storage
             .from('name-audio')
-            .upload(fileName, buffer, { contentType: mimeType, upsert: true });
+            .upload(fileName, buffer, { contentType: 'audio/mpeg', upsert: true });
 
         if (uploadError) {
-            console.error("[Upload] Audio upload failed:", uploadError);
+            console.error("[Upload] Audio upload failed (likely mime-type rejection):", uploadError);
             throw uploadError;
         }
 
