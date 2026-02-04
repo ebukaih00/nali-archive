@@ -24,8 +24,12 @@ async function handlePronounce(params: {
         if (nameData?.audio_url) {
             try {
                 // Determine content type based on URL extension BEFORE fetching
-                const urlWithoutParams = nameData.audio_url.split('?')[0];
-                const contentType = urlWithoutParams.toLowerCase().endsWith('.webm') ? 'audio/webm' : 'audio/mpeg';
+                const urlWithoutParams = nameData.audio_url.split('?')[0].toLowerCase();
+                const contentType = urlWithoutParams.endsWith('.webm')
+                    ? 'audio/webm'
+                    : (urlWithoutParams.endsWith('.m4a') || urlWithoutParams.endsWith('.mp4'))
+                        ? 'audio/mp4'
+                        : 'audio/mpeg';
 
                 console.log(`[Pronounce] Attempting to fetch DB cache for ${nameData.name} from: ${nameData.audio_url}`);
                 const cachedRes = await fetch(nameData.audio_url);
@@ -160,7 +164,10 @@ async function handlePronounce(params: {
 
         if (publicUrl && (!current?.audio_url || current?.verification_status !== 'verified')) {
             console.log(`[Pronounce] Updating AI cache URL for name_id: ${name_id}`);
-            await supabaseAdmin.from('names').update({ audio_url: publicUrl }).eq('id', name_id);
+            await supabaseAdmin.from('names').update({
+                audio_url: publicUrl,
+                status: 'pending' // Only AI-generated, so keep/set as pending if not verified
+            }).eq('id', name_id);
         }
     }
 

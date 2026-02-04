@@ -311,10 +311,25 @@ export async function submitReview(taskId: string, action: 'approved' | 'rejecte
                     if (oldPath) {
                         const { data: blob } = await supabaseAdmin.storage.from('vetting_samples').download(oldPath);
                         if (blob) {
-                            const newFilename = `${submission.name_id}_${Date.now()}.webm`; // Assuming webm from recorder
-                            await supabaseAdmin.storage.from('name-audio').upload(newFilename, blob, { contentType: 'audio/webm', upsert: true });
-                            const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(newFilename);
-                            updates.audio_url = publicUrl;
+                            const mimeType = blob.type || 'audio/webm';
+                            const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : 'webm';
+                            const newFilename = `${submission.name_id}_${Date.now()}.${ext}`;
+
+                            const arrayBuffer = await blob.arrayBuffer();
+                            const { error: uploadErr } = await supabaseAdmin.storage
+                                .from('name-audio')
+                                .upload(newFilename, Buffer.from(arrayBuffer), {
+                                    contentType: mimeType,
+                                    upsert: true
+                                });
+
+                            if (uploadErr) {
+                                console.error("[Review] Failed to move audio to public bucket:", uploadErr);
+                                updates.audio_url = submission.audio_url; // Fallback
+                            } else {
+                                const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(newFilename);
+                                updates.audio_url = publicUrl;
+                            }
                         } else {
                             // Fallback: use existing URL (might fail if private)
                             updates.audio_url = submission.audio_url;
@@ -385,14 +400,24 @@ export async function updateSubmission(taskId: string, formData: FormData) {
         }
 
         const sanitizedName = nameString.replace(/[^a-zA-Z0-9]/g, '_');
+
+        // Convert File to Buffer for reliable upload in Server Actions
+        const arrayBuffer = await audioFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const mimeType = audioFile.type || 'audio/webm';
+        const ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : 'webm';
+
         // Upload directly to name-audio (public) using Admin client to bypass RLS and ensure API accessibility
-        const fileName = `${taskId}_${Date.now()}.webm`;
+        const fileName = `${taskId}_${Date.now()}.${ext}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
             .from('name-audio')
-            .upload(fileName, audioFile, { contentType: 'audio/webm', upsert: true });
+            .upload(fileName, buffer, { contentType: mimeType, upsert: true });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+            console.error("[Upload] Audio upload failed:", uploadError);
+            throw uploadError;
+        }
 
         const { data: { publicUrl } } = supabaseAdmin.storage.from('name-audio').getPublicUrl(fileName);
         audioUrl = publicUrl;
