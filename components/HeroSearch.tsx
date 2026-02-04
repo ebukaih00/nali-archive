@@ -213,32 +213,24 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                 const searchTerm = query.trim();
                 const normalizedQuery = normalize(searchTerm);
 
-                // Fetch potential matches - we fetch slightly more to filter in JS
-                // This helps find names even if the user didn't type the accents
+                // Fetch directly from the new search_name column (optimized and indexed)
                 const { data, error } = await supabase
                     .from('names')
                     .select('id, name, origin, meaning, phonetic_hint, origin_country')
                     .eq('ignored', false)
-                    .ilike('name', `${searchTerm.substring(0, 3)}%`) // Use prefix for broad reach
-                    .limit(30);
+                    .ilike('search_name', `${normalizedQuery}%`)
+                    .limit(8);
 
                 if (error) throw error;
 
-                // Filter and sort by how well the normalized versions match
-                const matched = (data || [])
-                    .filter(n => normalize(n.name).includes(normalizedQuery))
-                    .sort((a, b) => {
-                        const normA = normalize(a.name);
-                        const normB = normalize(b.name);
-                        // Exact normalized match first
-                        if (normA === normalizedQuery) return -1;
-                        if (normB === normalizedQuery) return 1;
-                        // Then starts-with
-                        if (normA.startsWith(normalizedQuery)) return -1;
-                        if (normB.startsWith(normalizedQuery)) return 1;
-                        return 0;
-                    })
-                    .slice(0, 8);
+                // Sort by how well the normalized versions match
+                const matched = (data || []).sort((a, b) => {
+                    const normA = normalize(a.name);
+                    const normB = normalize(b.name);
+                    if (normA === normalizedQuery) return -1;
+                    if (normB === normalizedQuery) return 1;
+                    return 0;
+                });
 
                 setSuggestions(matched);
             } catch (err) {
@@ -274,25 +266,31 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
                     .ilike('name', searchTerm)
                     .maybeSingle();
 
-                target = exactMatch;
-
-                // 2. Fallback: Broad prefix search and JS filter (Handles marks regardless of database state)
-                if (!target && normalizedQuery.length >= 2) {
-                    const prefix = searchTerm.substring(0, 3);
-                    const { data: potentialMatches } = await supabase
+                if (exactMatch) {
+                    target = exactMatch;
+                } else {
+                    // 2. Try normalized match on search_name column (New!)
+                    const { data: normalizedMatch } = await supabase
                         .from('names')
                         .select('*')
                         .eq('ignored', false)
-                        .ilike('name', `${prefix}%`)
-                        .limit(50);
+                        .eq('search_name', normalizedQuery)
+                        .maybeSingle();
 
-                    target = potentialMatches?.find(m => normalize(m.name) === normalizedQuery) || null;
+                    target = normalizedMatch;
+                }
 
-                    // If still no luck, try a broader search for short names
-                    if (!target && potentialMatches && potentialMatches.length > 0) {
-                        // Pick the best suggestion if it's a very close match
-                        target = potentialMatches.find(m => normalize(m.name).startsWith(normalizedQuery)) || null;
-                    }
+                // 3. Fallback: Search prefix on search_name column
+                if (!target && normalizedQuery.length >= 2) {
+                    const { data: fuzzyMatch } = await supabase
+                        .from('names')
+                        .select('*')
+                        .eq('ignored', false)
+                        .ilike('search_name', `${normalizedQuery}%`)
+                        .limit(1)
+                        .maybeSingle();
+
+                    target = fuzzyMatch;
                 }
             }
         }
