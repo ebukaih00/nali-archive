@@ -210,15 +210,37 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
         const handler = setTimeout(async () => {
             setFetchingSuggestions(true);
             try {
+                const searchTerm = query.trim();
+                const normalizedQuery = normalize(searchTerm);
+
+                // Fetch potential matches - we fetch slightly more to filter in JS
+                // This helps find names even if the user didn't type the accents
                 const { data, error } = await supabase
                     .from('names')
                     .select('id, name, origin, meaning, phonetic_hint, origin_country')
                     .eq('ignored', false)
-                    .ilike('name', `${query}%`)
-                    .limit(8);
+                    .ilike('name', `${searchTerm.substring(0, 3)}%`) // Use prefix for broad reach
+                    .limit(30);
 
                 if (error) throw error;
-                setSuggestions(data || []);
+
+                // Filter and sort by how well the normalized versions match
+                const matched = (data || [])
+                    .filter(n => normalize(n.name).includes(normalizedQuery))
+                    .sort((a, b) => {
+                        const normA = normalize(a.name);
+                        const normB = normalize(b.name);
+                        // Exact normalized match first
+                        if (normA === normalizedQuery) return -1;
+                        if (normB === normalizedQuery) return 1;
+                        // Then starts-with
+                        if (normA.startsWith(normalizedQuery)) return -1;
+                        if (normB.startsWith(normalizedQuery)) return 1;
+                        return 0;
+                    })
+                    .slice(0, 8);
+
+                setSuggestions(matched);
             } catch (err) {
                 console.error('Search error:', err);
             } finally {
@@ -240,16 +262,38 @@ export default function HeroSearch({ popularNames = [] }: { popularNames?: strin
         if (input && typeof input === 'object') {
             target = input;
         } else {
-            const searchTerm = typeof input === 'string' ? input : query;
-            if (searchTerm.trim() !== '') {
-                // Try to find exact match in DB
-                const { data } = await supabase
+            const searchTerm = (typeof input === 'string' ? input : query).trim();
+            const normalizedQuery = normalize(searchTerm);
+
+            if (searchTerm !== '') {
+                // 1. Try exact/case-insensitive match first (optimized)
+                const { data: exactMatch } = await supabase
                     .from('names')
                     .select('*')
                     .eq('ignored', false)
-                    .ilike('name', searchTerm.trim())
+                    .ilike('name', searchTerm)
                     .maybeSingle();
-                target = data;
+
+                target = exactMatch;
+
+                // 2. Fallback: Broad prefix search and JS filter (Handles marks regardless of database state)
+                if (!target && normalizedQuery.length >= 2) {
+                    const prefix = searchTerm.substring(0, 3);
+                    const { data: potentialMatches } = await supabase
+                        .from('names')
+                        .select('*')
+                        .eq('ignored', false)
+                        .ilike('name', `${prefix}%`)
+                        .limit(50);
+
+                    target = potentialMatches?.find(m => normalize(m.name) === normalizedQuery) || null;
+
+                    // If still no luck, try a broader search for short names
+                    if (!target && potentialMatches && potentialMatches.length > 0) {
+                        // Pick the best suggestion if it's a very close match
+                        target = potentialMatches.find(m => normalize(m.name).startsWith(normalizedQuery)) || null;
+                    }
+                }
             }
         }
 

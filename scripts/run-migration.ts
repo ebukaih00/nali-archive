@@ -12,7 +12,7 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 async function runMigration() {
-    const migrationPath = path.join(process.cwd(), 'migrations', 'batch_notifications.sql');
+    const migrationPath = path.join(process.cwd(), 'migrations', 'normalized_search.sql');
     const sql = fs.readFileSync(migrationPath, 'utf8');
 
     console.log("🚀 Running migration: batch_notifications.sql");
