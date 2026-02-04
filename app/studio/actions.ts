@@ -86,7 +86,7 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
 
     // 3. Fetch all pending audio submissions (Open Queue)
     let data: any[] = [];
-    const { data: openQueue, error } = await supabase
+    let submissionQuery = supabase
         .from('audio_submissions')
         .select(`
             id, 
@@ -96,9 +96,16 @@ export async function getPendingBatches(): Promise<Record<string, BatchCard[]>> 
             names!inner (id, origin, assigned_to, ignored)
         `)
         .eq('status', 'pending')
-        .or(`assigned_to.is.null,assigned_to.ilike.%${user.email?.trim()}%`, { foreignTable: 'names' })
-        .eq('names.ignored', false)
-        .limit(2000);
+        .eq('names.ignored', false);
+
+    if (isAdmin) {
+        // Admins see EVERYTHING (unassigned or assigned to anyone)
+    } else {
+        // Contributors ONLY see submissions for names specifically assigned to them
+        submissionQuery = submissionQuery.ilike('names.assigned_to', `%${user.email?.trim()}%`);
+    }
+
+    const { data: openQueue, error } = await submissionQuery.limit(2000);
 
     if (error) {
         console.error("Error fetching batches:", error);
